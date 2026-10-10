@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
-class ResultView extends StatelessWidget {
+class ResultView extends StatefulWidget {
   final int totalPreguntas;
   final int correctas;
   final int incorrectas;
   final int porcentaje;
+  final List<Map<String, dynamic>> erroresDelExamen;
+  final List<Map<String, dynamic>> examenCompleto;
 
   const ResultView({
     super.key,
@@ -12,11 +15,12 @@ class ResultView extends StatelessWidget {
     required this.correctas,
     required this.incorrectas,
     required this.porcentaje,
+    this.erroresDelExamen = const [],
+    this.examenCompleto = const [],
   });
 
   /// Constructor factory para instanciar ResultView directamente desde el mapa de la API
   factory ResultView.fromMap(Map<String, dynamic> rawData) {
-    // Si la respuesta viene envuelta en un objeto 'resultado', usamos ese submapa
     final Map<String, dynamic> data =
         (rawData['resultado'] is Map<String, dynamic>)
             ? rawData['resultado']
@@ -37,14 +41,22 @@ class ResultView extends StatelessWidget {
         int.tryParse(data['respuestas_incorrectas']?.toString() ?? '') ??
         (total > aciertos ? total - aciertos : 0);
 
-    // Parseo seguro de la calificación o porcentaje
     num rawCalificacion =
         data['porcentaje'] ?? data['calificacion'] ?? data['promedio'] ?? 0;
 
     int pct = rawCalificacion.round();
-    // Si la calificación viene en escala 0-10 (ej. 8.5), la escalamos a porcentaje (85%)
     if (rawCalificacion > 0 && rawCalificacion <= 10) {
       pct = (rawCalificacion * 10).round();
+    }
+
+    List<Map<String, dynamic>> erroresList = [];
+    if (rawData['errores'] is List) {
+      erroresList = List<Map<String, dynamic>>.from(rawData['errores']);
+    }
+
+    List<Map<String, dynamic>> examenList = [];
+    if (rawData['examen_completo'] is List) {
+      examenList = List<Map<String, dynamic>>.from(rawData['examen_completo']);
     }
 
     return ResultView(
@@ -52,6 +64,136 @@ class ResultView extends StatelessWidget {
       correctas: aciertos,
       incorrectas: desaciertos,
       porcentaje: pct,
+      erroresDelExamen: erroresList,
+      examenCompleto: examenList,
+    );
+  }
+
+  @override
+  State<ResultView> createState() => _ResultViewState();
+}
+
+class _ResultViewState extends State<ResultView> {
+  bool _isLoading = false;
+
+  // Función para consultar a la IA con TODOS los errores de una sola vez
+  void _obtenerFundamentoGlobal() async {
+    setState(() => _isLoading = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1D61E7)),
+      ),
+    );
+
+    try {
+      final respuestaAI = await ApiService.askAiTutor(
+        prompt: 'Explícame de forma unificada los fundamentos teóricos de todos los errores cometidos en este examen.',
+        examenCompleto: widget.examenCompleto,
+        errores: widget.erroresDelExamen, // Mandamos la lista completa de errores
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar loader
+
+      _mostrarModalFundamento(
+        'Retroalimentación Global de la IA',
+        respuestaAI.isNotEmpty ? respuestaAI : 'No se pudo generar la retroalimentación en este momento.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar loader
+      _mostrarModalFundamento('Aviso', 'Error de conexión al consultar el tutor de IA.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _mostrarModalFundamento(String titulo, String contenido) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 8,
+        backgroundColor: Colors.white,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          constraints: const BoxConstraints(maxHeight: 600),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.psychology_rounded, color: Color(0xFF1D61E7), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      titulo,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(height: 24, thickness: 1, color: Color(0xFFE2E8F0)),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Text(
+                    contenido
+                        .replaceAll('### ', '')
+                        .replaceAll('## ', '')
+                        .replaceAll('**', ''),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D61E7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Entendido y Repasado',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -59,246 +201,243 @@ class ResultView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text(
+          'Resultados y Fundamentos',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1E293B),
+        elevation: 0,
+        centerTitle: true,
+      ),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 1. Destellos superiores
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 18),
+                  SizedBox(width: 8),
+                  Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 24),
+                  SizedBox(width: 8),
+                  Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 18),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-                // 1. Destellos superiores
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 18),
-                    SizedBox(width: 8),
-                    Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 24),
-                    SizedBox(width: 8),
-                    Icon(Icons.auto_awesome, color: Color(0xFFF59E0B), size: 18),
-                  ],
+              // 2. Icono de Trofeo / Medalla
+              Container(
+                width: 90,
+                height: 90,
+                decoration: const BoxDecoration(shape: BoxShape.circle),
+                child: Center(
+                  child: Icon(
+                    widget.porcentaje >= 60 ? Icons.emoji_events_rounded : Icons.stars_rounded,
+                    size: 80,
+                    color: widget.porcentaje >= 60 ? const Color(0xFFEAB308) : const Color(0xFF94A3B8),
+                  ),
                 ),
+              ),
+              const SizedBox(height: 16),
 
+              // 3. Título y Subtítulo
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.porcentaje >= 60 ? '¡Felicidades!' : '¡Buen intento!',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(widget.porcentaje >= 60 ? '🎉' : '💪', style: const TextStyle(fontSize: 26)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Has completado la evaluación de la sección',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 24),
+
+              // 4. Calificación Promedio
+              const Text(
+                'Tu calificación',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.porcentaje}%',
+                style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, color: Color(0xFF1D61E7), height: 1.1),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.correctas} de ${widget.totalPreguntas} correctas',
+                style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 28),
+
+              // 5. Tarjetas de Estadísticas
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${widget.correctas}',
+                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Correctas',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF065F46)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${widget.incorrectas}',
+                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Incorrectas',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF991B1B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              // 6. Sección de Errores detectados y Botón Global de IA
+              if (widget.erroresDelExamen.isNotEmpty) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '🔍 Resumen de Preguntas Incorrectas',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
+                ),
                 const SizedBox(height: 12),
-
-                // 2. Icono de Trofeo / Medalla según puntaje
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      porcentaje >= 60
-                          ? Icons.emoji_events_rounded
-                          : Icons.stars_rounded,
-                      size: 80,
-                      color: porcentaje >= 60
-                          ? const Color(0xFFEAB308)
-                          : const Color(0xFF94A3B8),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // 3. Título y Subtítulo
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      porcentaje >= 60 ? '¡Felicidades!' : '¡Buen intento!',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
+                
+                // Lista limpia informativa (sin botones individuales)
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: widget.erroresDelExamen.length,
+                  itemBuilder: (context, index) {
+                    final error = widget.erroresDelExamen[index];
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      porcentaje >= 60 ? '🎉' : '💪',
-                      style: const TextStyle(fontSize: 26),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 6),
-
-                const Text(
-                  'Has completado la evaluación de la sección',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // 4. Calificación Promedio Dinámica
-                const Text(
-                  'Tu calificación',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '$porcentaje%',
-                  style: const TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF1D61E7),
-                    height: 1.1,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '$correctas de $totalPreguntas correctas',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-
-                const SizedBox(height: 36),
-
-                // 5. Tarjetas de Estadísticas Dinámicas
-                Row(
-                  children: [
-                    // Correctas
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              '$correctas',
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF10B981),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Respuestas correctas',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF065F46),
-                                height: 1.25,
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pregunta: ${error['pregunta'] ?? error['texto_pregunta'] ?? ''}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text('• Tu respuesta: ${error['respuesta_usuario'] ?? ''}', style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+                          Text('• Respuesta correcta: ${error['respuesta_correcta'] ?? ''}', style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                    ),
-
-                    const SizedBox(width: 16),
-
-                    // Incorrectas
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEF2F2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              '$incorrectas',
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFEF4444),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Respuestas incorrectas',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF991B1B),
-                                height: 1.25,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 40),
-
-                // 6. Botón "Ver plan de estudio"
-                ElevatedButton(
-                  onPressed: () {
-                    // Devuelve `true` a study_view para refrescar el progreso
-                    Navigator.of(context).pop(true);
+                    );
                   },
+                ),
+                const SizedBox(height: 16),
+
+                // UN SOLO BOTÓN GLOBAL PARA CONSULTAR A LA IA
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _obtenerFundamentoGlobal,
+                  icon: const Icon(Icons.psychology_rounded, size: 20),
+                  label: const Text('Ver Fundamento Teórico Global de Errores'),
                   style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 52),
+                    minimumSize: const Size(double.infinity, 50),
                     backgroundColor: const Color(0xFF1D61E7),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    'Ver plan de estudio',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
                   ),
                 ),
-
-                const SizedBox(height: 14),
-
-                // 7. Botón "Volver a mis cursos"
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 52),
-                    side: const BorderSide(color: Color(0xFF1D61E7), width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    'Volver a mis cursos',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1D61E7),
-                    ),
-                  ),
+                const SizedBox(height: 24),
+              ] else ...[
+                const Text(
+                  '¡Excelente trabajo! No tuviste errores en este examen.',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
                 ),
-
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
               ],
-            ),
+
+              // 7. Botones de Navegación principales
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 52),
+                  backgroundColor: const Color(0xFF1D61E7),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Ver plan de estudio',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 52),
+                  side: const BorderSide(color: Color(0xFF1D61E7), width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Volver a mis cursos',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1D61E7)),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
           ),
         ),
       ),

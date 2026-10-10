@@ -123,12 +123,7 @@ if (res['success'] == true || res['resultado'] != null) {
   Navigator.pushReplacement(
     context,
     MaterialPageRoute(
-      builder: (context) => ResultView(
-        totalPreguntas: total,
-        correctas: buenas,
-        incorrectas: malas,
-        porcentaje: pct,
-      ),
+      builder: (context) => ResultView.fromMap(res),
     ),
   );
 } else {
