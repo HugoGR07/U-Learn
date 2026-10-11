@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'result_view.dart';
+import '../services/notification_service.dart';
 
 class ExamView extends StatefulWidget {
   final Map<String, dynamic> examen;
@@ -118,6 +119,11 @@ if (res['success'] == true || res['resultado'] != null) {
   // 3. Leemos la calificación (ej. 80.0) y la redondeamos a entero
   final num califRaw = resultado['calificacion'] ?? 0;
   final int pct = califRaw.round();
+
+  NotificationService.showProgress(
+    '¡Examen completado! ✅',
+    'Acertaste $buenas/$total preguntas ($pct%).',
+  );
 
   // 4. Navegamos pasando las variables mapeadas a ResultView
   Navigator.pushReplacement(

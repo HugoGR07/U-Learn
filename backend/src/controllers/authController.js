@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { sendMail } = require('../services/mailService');
 
 // Registrar usuario
 exports.register = async (req, res) => {
@@ -157,5 +158,40 @@ exports.changePassword = async (req, res) => {
   } catch (error) {
     console.error('Error al cambiar contraseña:', error);
     res.status(500).json({ message: 'Error interno al cambiar la contraseña' });
+  }
+};
+
+
+exports.getNotificationSettings = async (req, res) => {
+  try {
+    const r = await db.query('SELECT notif_correo FROM usuario WHERE id_usuario = $1', [req.user.id_usuario]);
+    res.json({ notif_correo: r.rows[0]?.notif_correo ?? true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener preferencias' });
+  }
+};
+
+exports.updateNotificationSettings = async (req, res) => {
+  const { notif_correo } = req.body;
+  if (typeof notif_correo !== 'boolean') {
+    return res.status(400).json({ message: 'Valor inválido' });
+  }
+  try {
+    await db.query('UPDATE usuario SET notif_correo = $1 WHERE id_usuario = $2', [notif_correo, req.user.id_usuario]);
+    res.json({ message: 'Preferencia actualizada', notif_correo });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al guardar preferencia' });
+  }
+};
+
+exports.testEmail = async (req, res) => {
+  try {
+    await sendMail(req.user.correo, 'Prueba de correo U-Learn', '<p>Si ves esto, el correo funciona ✅</p>');
+    res.json({ message: 'Correo enviado' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'No se pudo enviar el correo' });
   }
 };

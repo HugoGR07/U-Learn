@@ -243,7 +243,16 @@ exports.getUserGuides = async (req, res) => {
           FROM avance_seccion a 
           JOIN seccion s ON a.id_seccion = s.id_seccion 
           WHERE s.id_guia = g.id_guia AND a.id_usuario = $1 AND a.completado = TRUE
-        ), 0) AS secciones_completadas
+        ), 0) AS secciones_completadas,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM seccion s
+          JOIN examen e ON e.id_seccion = s.id_seccion
+          WHERE s.id_guia = g.id_guia
+            AND NOT EXISTS (
+              SELECT 1 FROM intento_examen i
+              WHERE i.id_examen = e.id_examen AND i.id_usuario = $1)
+        ), 0) AS examenes_pendientes
        FROM guia_estudio g
        INNER JOIN tema t ON g.id_tema = t.id_tema
        WHERE g.id_usuario = $1
@@ -352,10 +361,12 @@ exports.completeSection = async (req, res) => {
 
   try {
     await db.query(
-      `INSERT INTO avance_seccion (id_seccion, id_usuario, completado)
-       VALUES ($1, $2, TRUE)
+      `INSERT INTO avance_seccion (id_seccion, id_usuario, completado, fecha_inicio, fecha_fin)
+       VALUES ($1, $2, TRUE, NOW(), NOW())
        ON CONFLICT (id_seccion, id_usuario)
-       DO UPDATE SET completado = TRUE`,
+       DO UPDATE SET completado = TRUE,
+            fecha_inicio = COALESCE(avance_seccion.fecha_fin, NOW()),
+            fecha_fin = COALESCE(avance_seccion.fecha_fin, NOW())`,
       [id_seccion, id_usuario]
     );
 
@@ -363,5 +374,25 @@ exports.completeSection = async (req, res) => {
   } catch (error) {
     console.error('Error al completar la sección:', error);
     res.status(500).json({ message: 'Error interno al registrar avance' });
+  }
+};
+
+// 6. REGISTRAR INICIO DE SECCIÓN (solo la primera vez)
+exports.startSection = async (req, res) => {
+  const { id_seccion } = req.body;
+  const id_usuario = req.user.id_usuario;
+
+  try {
+    await db.query(
+      `INSERT INTO avance_seccion (id_seccion, id_usuario, completado, fecha_inicio)
+       VALUES ($1, $2, FALSE, NOW())
+       ON CONFLICT (id_seccion, id_usuario)
+       DO UPDATE SET fecha_inicio = COALESCE(avance_seccion.fecha_inicio, NOW())`,
+      [id_seccion, id_usuario]
+    );
+    res.json({ message: 'Inicio registrado' });
+  } catch (error) {
+    console.error('Error al registrar inicio de sección:', error);
+    res.status(500).json({ message: 'Error interno al registrar inicio' });
   }
 };

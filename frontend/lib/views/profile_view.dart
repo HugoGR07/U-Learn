@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'login_view.dart';
+import '../services/notification_service.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -13,6 +14,27 @@ class _ProfileViewState extends State<ProfileView> {
   bool _emailNotifications = true;
   bool _pushNotifications = true;
   bool _reminderNotifications = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationPrefs();
+  }
+
+  Future<void> _loadNotificationPrefs() async {
+    final local = await NotificationService.loadPrefs();
+    final email = await ApiService.getNotificationSettings();
+    if (!mounted) return;
+    setState(() {
+      _pushNotifications = local.push;
+      _reminderNotifications = local.reminder;
+      _emailNotifications = email ?? _emailNotifications;
+    });
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   String get _fullName {
     final user = ApiService.currentUser;
@@ -419,18 +441,32 @@ class _ProfileViewState extends State<ProfileView> {
                   title: const Text('Notificaciones Push', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   subtitle: const Text('Recibe alertas sobre tu progreso diario', style: TextStyle(fontSize: 12)),
                   value: _pushNotifications,
-                  onChanged: (val) {
+                  onChanged: (val) async {
+                    if (val && !await NotificationService.requestPermission()) {
+                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      return;
+                    }
+                    await NotificationService.setPush(val);
                     setModalState(() => _pushNotifications = val);
                     setState(() => _pushNotifications = val);
+                    if (val) {
+                      NotificationService.showProgress(
+                          'Notificaciones activadas', 'Te avisaremos de tu progreso en U-Learn.');
+                    }
                   },
                 ),
                 const Divider(),
                 SwitchListTile(
                   activeColor: const Color(0xFF1D61E7),
                   title: const Text('Alertas por Correo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Resumen semanal de guías completadas', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('Resumen semanal de tu progreso', style: TextStyle(fontSize: 12)),
                   value: _emailNotifications,
-                  onChanged: (val) {
+                  onChanged: (val) async {
+                    final ok = await ApiService.updateNotificationSettings(emailAlerts: val);
+                    if (!ok) {
+                      _snack('No se pudo guardar la preferencia.');
+                      return;
+                    }
                     setModalState(() => _emailNotifications = val);
                     setState(() => _emailNotifications = val);
                   },
@@ -441,7 +477,12 @@ class _ProfileViewState extends State<ProfileView> {
                   title: const Text('Recordatorios de Estudio', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   subtitle: const Text('Aviso para realizar tus exámenes pendientes', style: TextStyle(fontSize: 12)),
                   value: _reminderNotifications,
-                  onChanged: (val) {
+                  onChanged: (val) async {
+                    if (val && !await NotificationService.requestPermission()) {
+                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      return;
+                    }
+                    await NotificationService.setReminder(val);
                     setModalState(() => _reminderNotifications = val);
                     setState(() => _reminderNotifications = val);
                   },

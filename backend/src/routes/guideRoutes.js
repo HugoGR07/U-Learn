@@ -17,4 +17,6 @@ router.get('/my-guides', authMiddleware, guideController.getUserGuides);
 router.get('/details/:id_guia', authMiddleware, guideController.getGuideDetails);
 router.post('/complete-section', authMiddleware, guideController.completeSection);
 
+router.post('/start-section', authMiddleware, guideController.startSection);
+
 module.exports = router;

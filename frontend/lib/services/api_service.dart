@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Para emulador Android usa 10.0.2.2. Si pruebas en dispositivo físico, usa tu IP local (ej. 192.168.x.x)
-  static const String baseUrl = 'http://127.0.0.1:3000/api';
+  static const String baseUrl = 'http://192.168.1.67:3000/api';
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
 
@@ -238,6 +238,23 @@ class ApiService {
     }
   }
 
+    /// Registrar que el usuario abrió/empezó una sección
+  static Future<bool> startSection(int idSeccion) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/guides/start-section'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'id_seccion': idSeccion}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<Map<String, dynamic>> completeSectionExam(
       int examId, List<Map<String, dynamic>> respuestas) async {
     try {
@@ -269,6 +286,36 @@ class ApiService {
         'success': false,
         'message': 'Error de conexión: $e',
       };
+    }
+  }
+
+
+  static Future<bool?> getNotificationSettings() async {
+    try {
+      final r = await http.get(
+        Uri.parse('$baseUrl/auth/notification-settings'),
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      );
+      if (r.statusCode != 200) return null;
+      return jsonDecode(r.body)['notif_correo'] as bool?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> updateNotificationSettings({required bool emailAlerts}) async {
+    try {
+      final r = await http.put(
+        Uri.parse('$baseUrl/auth/notification-settings'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'notif_correo': emailAlerts}),
+      );
+      return r.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 }

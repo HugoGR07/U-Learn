@@ -15,4 +15,9 @@ router.get('/me', authMiddleware, authController.getProfile);
 router.put('/update-profile', authMiddleware, authController.updateProfile);
 router.put('/change-password', authMiddleware, authController.changePassword);
 
+router.get('/notification-settings', authMiddleware, authController.getNotificationSettings);
+router.put('/notification-settings', authMiddleware, authController.updateNotificationSettings);
+router.post('/test-email', authMiddleware, authController.testEmail);
+
+
 module.exports = router;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class LessonView extends StatefulWidget {
   final int idSeccion;
@@ -19,20 +20,32 @@ class LessonView extends StatefulWidget {
 
 class _LessonViewState extends State<LessonView> {
   late int _index;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _index = widget.currentIndex;
-    _markCurrentSectionCompleted();
+    _startCurrentSection();
   }
 
-  void _markCurrentSectionCompleted() async {
-    final currentLesson = widget.allLessons[_index];
-    final idSeccion = currentLesson['id_seccion'];
+  void _startCurrentSection() async {
+    final idSeccion = widget.allLessons[_index]['id_seccion'];
     if (idSeccion != null) {
-      await ApiService.completeSection(idSeccion);
+      await ApiService.startSection(idSeccion);
     }
+  }
+
+  Future<void> _completeCurrentSection({bool esUltima = false}) async {
+    final idSeccion = widget.allLessons[_index]['id_seccion'];
+    if (idSeccion == null) return;
+    final ok = await ApiService.completeSection(idSeccion);
+    if (!ok) return;
+    if (esUltima) {
+      NotificationService.showProgress(
+          '¡Sección completada! ✅', 'Sigue así, vas avanzando en tu guía.');
+    }
+    NotificationService.refreshReminder();
   }
 
   @override
@@ -178,7 +191,7 @@ class _LessonViewState extends State<LessonView> {
                               setState(() {
                                 _index--;
                               });
-                              _markCurrentSectionCompleted();
+                              _startCurrentSection();
                             }
                           : null,
                       style: OutlinedButton.styleFrom(
@@ -207,16 +220,21 @@ class _LessonViewState extends State<LessonView> {
                   // Botón Siguiente
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        if (_index < totalLessons - 1) {
-                          setState(() {
-                            _index++;
-                          });
-                          _markCurrentSectionCompleted();
-                        } else {
-                          // Al finalizar la última lección, regresa al resumen del curso
-                          Navigator.pop(context, true);
-                        }
+                      onPressed: _busy 
+                        ? null
+                        : () async {
+                          setState(() => _busy = true);
+                          await _completeCurrentSection(esUltima: _index == totalLessons - 1);
+                          if (!mounted) return;
+                          if (_index < totalLessons - 1) {
+                            setState(() { 
+                              _index++; 
+                              _busy = false; 
+                            });
+                            _startCurrentSection();
+                          } else {
+                            Navigator.pop(context, true);
+                          }
                       },
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
