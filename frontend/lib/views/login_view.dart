@@ -30,7 +30,11 @@ class _LoginViewState extends State<LoginView> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      _showMessage('Ingresa tu correo y contraseña');
+      _showFloatingDialog(
+        title: 'Campos incompletos',
+        message: 'Por favor, ingresa tu correo y contraseña para continuar.',
+        isSuccess: false,
+      );
       return;
     }
 
@@ -47,26 +51,108 @@ class _LoginViewState extends State<LoginView> {
       if (!mounted) return;
 
       if (result['success']) {
-        _showMessage('¡Bienvenido!');
-
         // Redirigir directamente a la pantalla de Cursos
+        // (El mensaje de bienvenida ya se muestra automáticamente allá durante 3 segundos)
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const CoursesView()),
           (route) => false,
         );
       } else {
-        _showMessage(result['message'] ?? 'Credenciales inválidas');
+        _showFloatingDialog(
+          title: 'Acceso denegado',
+          message: result['message'] ?? 'Credenciales inválidas, verifica tus datos.',
+          isSuccess: false,
+        );
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      _showMessage('Error al conectar con el servidor');
+      _showFloatingDialog(
+        title: 'Error de conexión',
+        message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
+        isSuccess: false,
+      );
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  // VENTANA FLOTANTE VISIBLE Y BONITA PARA MENSAJES DE LOGIN
+  void _showFloatingDialog({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    VoidCallback? onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    if (onConfirm != null) onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D61E7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Aceptar',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

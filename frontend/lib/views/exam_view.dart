@@ -1,3 +1,4 @@
+// lib/views/exam_view.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'result_view.dart';
@@ -94,39 +95,135 @@ class _ExamViewState extends State<ExamView> {
 
       if (!mounted) return;
 
-      // exam_view.dart (Dentro de _completarExamen)
+      // PROCESAMIENTO LOCAL DE RESULTADOS CON TEXTO Y CONCEPTO COMPLETO
+      List<Map<String, dynamic>> erroresLocales = [];
+      List<Map<String, dynamic>> examenCompletoLocal = [];
+      int correctasLocales = 0;
+      int incorrectasLocales = 0;
 
-if (res['success'] == true || res['resultado'] != null) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('¡Examen completado con éxito!'),
-      backgroundColor: Color(0xFF10B981),
-    ),
-  );
+      for (int i = 0; i < _preguntas.length; i++) {
+        final pregunta = _preguntas[i] as Map<String, dynamic>;
+        final enunciado = pregunta['pregunta'] ?? pregunta['enunciado'] ?? 'Sin pregunta';
+        final opciones = (pregunta['opciones'] as List?) ?? [];
+        
+        String letraCorrecta = '';
+        String textoCorrecta = '';
 
-  // 1. Extraemos el objeto 'resultado' que envía Node.js
-  final Map<String, dynamic> resultado = 
-      (res['resultado'] is Map<String, dynamic>) 
-          ? res['resultado'] 
-          : res;
+        for (var op in opciones) {
+          if (op is Map) {
+            final bool esCorrecta = op['es_correcta'] == true || 
+                                   op['esCorrecta'] == true || 
+                                   op['correcta'] == true || 
+                                   op['is_correct'] == true;
+            if (esCorrecta) {
+              letraCorrecta = op['inciso']?.toString().trim().toUpperCase() ?? '';
+              textoCorrecta = op['texto']?.toString().trim() ?? op['opcion']?.toString().trim() ?? '';
+            }
+          }
+        }
+        
+        if (letraCorrecta.isEmpty) {
+          letraCorrecta = pregunta['respuesta_correcta']?.toString().trim().toUpperCase() ?? 
+                          pregunta['correcta']?.toString().trim().toUpperCase() ?? '';
+        }
 
-  // 2. Leemos las claves EXACTAS que envía el backend
-  final int total = int.tryParse(resultado['totalPreguntas']?.toString() ?? '') ?? 0;
-  final int buenas = int.tryParse(resultado['correctas']?.toString() ?? '') ?? 0;
-  final int malas = int.tryParse(resultado['incorrectas']?.toString() ?? '') ?? 0;
-  
-  // 3. Leemos la calificación (ej. 80.0) y la redondeamos a entero
-  final num califRaw = resultado['calificacion'] ?? 0;
-  final int pct = califRaw.round();
+        if (textoCorrecta.isEmpty && letraCorrecta.isNotEmpty) {
+          for (var op in opciones) {
+            if (op is Map) {
+              final incisoOp = (op['inciso']?.toString() ?? '').trim().toUpperCase();
+              if (incisoOp == letraCorrecta) {
+                textoCorrecta = op['texto']?.toString().trim() ?? op['opcion']?.toString().trim() ?? '';
+                break;
+              }
+            }
+          }
+        }
 
-  // 4. Navegamos pasando las variables mapeadas a ResultView
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(
-      builder: (context) => ResultView.fromMap(res),
-    ),
-  );
-} else {
+        final int? optIndexUsuario = _respuestasUsuario[i];
+        String letraUsuario = '';
+        String textoUsuario = '';
+
+        if (optIndexUsuario != null && optIndexUsuario < opciones.length) {
+          final opUser = opciones[optIndexUsuario];
+          if (opUser is Map) {
+            letraUsuario = opUser['inciso']?.toString().trim().toUpperCase() ?? 
+                           (optIndexUsuario < _letras.length ? _letras[optIndexUsuario] : '');
+            textoUsuario = opUser['texto']?.toString().trim() ?? opUser['opcion']?.toString().trim() ?? '';
+          } else {
+            letraUsuario = optIndexUsuario < _letras.length ? _letras[optIndexUsuario] : '';
+            textoUsuario = opUser.toString().trim();
+          }
+        }
+
+        bool esError = false;
+        if (letraCorrecta.isNotEmpty && letraUsuario.isNotEmpty) {
+          esError = letraUsuario != letraCorrecta;
+        } else {
+          esError = optIndexUsuario == null; 
+        }
+
+        // Formato unificado: "Inciso) Texto completo del concepto"
+        final String respuestaCorrectaFormateada = letraCorrecta.isNotEmpty && textoCorrecta.isNotEmpty
+            ? '$letraCorrecta) $textoCorrecta'
+            : (textoCorrecta.isNotEmpty ? textoCorrecta : (letraCorrecta.isNotEmpty ? letraCorrecta : 'No especificada'));
+
+        final String respuestaUsuarioFormateada = letraUsuario.isNotEmpty && textoUsuario.isNotEmpty
+            ? '$letraUsuario) $textoUsuario'
+            : (textoUsuario.isNotEmpty ? textoUsuario : (letraUsuario.isNotEmpty ? letraUsuario : 'No respondida'));
+
+        examenCompletoLocal.add({
+          'pregunta': enunciado,
+          'es_correcta': !esError,
+          'respuesta_usuario': respuestaUsuarioFormateada,
+          'respuesta_correcta': respuestaCorrectaFormateada,
+        });
+
+        if (esError) {
+          incorrectasLocales++;
+          erroresLocales.add({
+            'pregunta': enunciado,
+            'respuesta_usuario': respuestaUsuarioFormateada,
+            'respuesta_correcta': respuestaCorrectaFormateada,
+          });
+        } else {
+          correctasLocales++;
+        }
+      }
+
+      if (res['success'] == true || res['resultado'] != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Examen completado con éxito!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+
+        final Map<String, dynamic> resultado = 
+            (res['resultado'] is Map<String, dynamic>) 
+                ? res['resultado'] 
+                : res;
+
+        final int total = int.tryParse(resultado['totalPreguntas']?.toString() ?? '') ?? _preguntas.length;
+        final int buenas = int.tryParse(resultado['correctas']?.toString() ?? '') ?? correctasLocales;
+        final int malas = int.tryParse(resultado['incorrectas']?.toString() ?? '') ?? incorrectasLocales;
+        
+        final num califRaw = resultado['calificacion'] ?? ((buenas / total) * 100);
+        final int pct = califRaw.round();
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResultView(
+              totalPreguntas: total,
+              correctas: buenas,
+              incorrectas: malas,
+              porcentaje: pct,
+              erroresDelExamen: erroresLocales,
+              examenCompleto: examenCompletoLocal,
+            ),
+          ),
+        );
+      } else {
         setState(() => _isSubmitting = false);
         final String errorMessage =
             res['message']?.toString() ?? 'Error al guardar el examen';

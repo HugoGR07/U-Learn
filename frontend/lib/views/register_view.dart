@@ -44,17 +44,29 @@ class _RegisterViewState extends State<RegisterView> {
         correo.isEmpty ||
         contrasena.isEmpty ||
         confirmPassword.isEmpty) {
-      _showMessage('Por favor, completa los campos obligatorios');
+      _showFloatingDialog(
+        title: 'Campos incompletos',
+        message: 'Por favor, completa los campos obligatorios para continuar.',
+        isSuccess: false,
+      );
       return;
     }
 
     if (contrasena != confirmPassword) {
-      _showMessage('Las contraseñas no coinciden');
+      _showFloatingDialog(
+        title: 'Contraseñas incorrectas',
+        message: 'Las contraseñas no coinciden, verifícalas.',
+        isSuccess: false,
+      );
       return;
     }
 
     if (contrasena.length < 6) {
-      _showMessage('La contraseña debe tener al menos 6 caracteres');
+      _showFloatingDialog(
+        title: 'Contraseña débil',
+        message: 'La contraseña debe tener al menos 6 caracteres.',
+        isSuccess: false,
+      );
       return;
     }
 
@@ -73,19 +85,108 @@ class _RegisterViewState extends State<RegisterView> {
     if (!mounted) return;
 
     if (result['success']) {
-      _showMessage(result['message'] ?? 'Usuario registrado exitosamente');
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginView()),
+      _showFloatingDialog(
+        title: '¡Registro exitoso! 🎉',
+        message: 'Usuario registrado correctamente, inicia sesión para ingresar.',
+        isSuccess: true,
+        onConfirm: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginView()),
+          );
+        },
       );
     } else {
-      _showMessage(result['message'] ?? 'Error al registrar');
+      String msgError = result['message']?.toString() ?? 'Error al registrar';
+      if (msgError.toLowerCase().contains('correo') || msgError.toLowerCase().contains('registrado')) {
+        msgError = 'El correo que ingresaste ya está registrado. Intenta con otro correo para ingresar.';
+      }
+      _showFloatingDialog(
+        title: 'Aviso',
+        message: msgError,
+        isSuccess: false,
+      );
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  // NUEVA VENTANA FLOTANTE VISIBLE Y BONITA
+  void _showFloatingDialog({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    VoidCallback? onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    if (onConfirm != null) onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D61E7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Aceptar',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

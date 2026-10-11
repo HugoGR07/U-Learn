@@ -99,7 +99,7 @@ class _ResultViewState extends State<ResultView> {
       Navigator.pop(context); // Cerrar loader
 
       _mostrarModalFundamento(
-        'Retroalimentación Global de la IA',
+        'Retroalimentación Global',
         respuestaAI.isNotEmpty ? respuestaAI : 'No se pudo generar la retroalimentación en este momento.',
       );
     } catch (e) {
@@ -112,36 +112,47 @@ class _ResultViewState extends State<ResultView> {
   }
 
   void _mostrarModalFundamento(String titulo, String contenido) {
+    // Limpieza profunda de asteriscos, guiones de markdown y separadores sobrantes
+    String contenidoLimpiado = contenido
+        .replaceAll('### ', '')
+        .replaceAll('## ', '')
+        .replaceAll('# ', '')
+        .replaceAll('**', '')
+        .replaceAll('*', '')
+        .replaceAll('---', '')
+        .replaceAll('\r\n', '\n');
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 12,
         backgroundColor: Colors.white,
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.85,
-          constraints: const BoxConstraints(maxHeight: 600),
-          padding: const EdgeInsets.all(24),
+          width: MediaQuery.of(context).size.width * 0.90,
+          constraints: const BoxConstraints(maxHeight: 650),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Encabezado
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.psychology_rounded, color: Color(0xFF1D61E7), size: 24),
+                    child: const Text('🧠', style: TextStyle(fontSize: 24)),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Text(
                       titulo,
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1E293B),
                       ),
@@ -153,24 +164,27 @@ class _ResultViewState extends State<ResultView> {
                   ),
                 ],
               ),
-              const Divider(height: 24, thickness: 1, color: Color(0xFFE2E8F0)),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12.0),
+                child: Divider(thickness: 1.2, color: Color(0xFFF1F5F9)),
+              ),
+              // Contenido con diseño estilizado y ordenado
               Expanded(
                 child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
                   child: Text(
-                    contenido
-                        .replaceAll('### ', '')
-                        .replaceAll('## ', '')
-                        .replaceAll('**', ''),
+                    contenidoLimpiado.trim(),
                     style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.6,
+                      fontSize: 14.5,
+                      height: 1.7,
                       color: Color(0xFF334155),
-                      fontWeight: FontWeight.normal,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
+              // Botón inferior
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -178,15 +192,15 @@ class _ResultViewState extends State<ResultView> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1D61E7),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Entendido y Repasado',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    '✨ Entendido y Repasado',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
