@@ -161,7 +161,7 @@ class _LessonViewState extends State<LessonView> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'RecuerdaRepasar este concepto para ponerlo en práctica en tu vida financiera cotidiana.',
+                            'Recuerda repasar este concepto para ponerlo en práctica en tu vida financiera cotidiana.',
                             style: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFF334155),

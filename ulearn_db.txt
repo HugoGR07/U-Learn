@@ -1,0 +1,182 @@
+-- =========================================================
+-- TABLAS CORE DE USUARIO Y TEMAS
+-- =========================================================
+
+CREATE TABLE usuario (
+    id_usuario SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    apellido_paterno VARCHAR(50),
+    apellido_materno VARCHAR(50),
+    correo VARCHAR(150) NOT NULL UNIQUE,
+    contrasena VARCHAR(255) NOT NULL,
+    fecha_registro TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE tema (
+    id_tema SERIAL PRIMARY KEY,
+    nombre_tema VARCHAR(100) NOT NULL UNIQUE,
+    descripcion TEXT
+);
+
+
+-- =========================================================
+-- ESTRUCTURA DE LA GUÍA DE ESTUDIO
+-- =========================================================
+
+CREATE TABLE guia_estudio (
+    id_guia SERIAL PRIMARY KEY,
+    id_usuario INT NOT NULL,
+    id_tema INT NOT NULL,
+
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_guia_usuario
+        FOREIGN KEY (id_usuario)
+        REFERENCES usuario(id_usuario),
+
+    CONSTRAINT fk_guia_tema
+        FOREIGN KEY (id_tema)
+        REFERENCES tema(id_tema)
+);
+
+
+CREATE TABLE seccion (
+    id_seccion SERIAL PRIMARY KEY,
+    id_guia INT NOT NULL,
+    titulo VARCHAR(150) NOT NULL,
+    orden_seccion INT NOT NULL,
+
+    CONSTRAINT uq_seccion_guia_orden
+        UNIQUE (id_guia, orden_seccion),
+
+    CONSTRAINT fk_seccion_guia
+        FOREIGN KEY (id_guia)
+        REFERENCES guia_estudio(id_guia)
+);
+
+
+CREATE TABLE contenido_seccion (
+    id_contenido SERIAL PRIMARY KEY,
+    id_seccion INT NOT NULL,
+    titulo VARCHAR(150) NOT NULL,
+    contenido TEXT NOT NULL,
+    orden_contenido INT NOT NULL,
+
+    CONSTRAINT uq_contenido_seccion_orden
+        UNIQUE (id_seccion, orden_contenido),
+
+    CONSTRAINT fk_contenido_seccion
+        FOREIGN KEY (id_seccion)
+        REFERENCES seccion(id_seccion)
+);
+
+
+-- =========================================================
+-- AVANCE Y PROGRESO DEL USUARIO
+-- =========================================================
+
+CREATE TABLE avance_seccion (
+    id_avance SERIAL PRIMARY KEY,
+    id_seccion INT NOT NULL,
+    id_usuario INT NOT NULL,
+    completado BOOLEAN NOT NULL DEFAULT FALSE,
+    fecha_inicio TIMESTAMP,
+    fecha_fin TIMESTAMP,
+
+    CONSTRAINT uq_avance_usuario_seccion
+        UNIQUE (id_usuario, id_seccion),
+
+    CONSTRAINT fk_avance_usuario
+        FOREIGN KEY (id_usuario)
+        REFERENCES usuario(id_usuario),
+
+    CONSTRAINT fk_avance_seccion
+        FOREIGN KEY (id_seccion)
+        REFERENCES seccion(id_seccion)
+);
+
+
+-- =========================================================
+-- MÓDULO DE EVALUACIÓN / EXÁMENES
+-- =========================================================
+
+CREATE TABLE examen (
+    id_examen SERIAL PRIMARY KEY,
+    id_seccion INT NOT NULL,
+    tiempo_duracion_minutos INT,
+
+    CONSTRAINT fk_examen_seccion
+        FOREIGN KEY (id_seccion)
+        REFERENCES seccion(id_seccion)
+);
+
+
+CREATE TABLE pregunta (
+    id_pregunta SERIAL PRIMARY KEY,
+    id_examen INT NOT NULL,
+    pregunta TEXT NOT NULL,
+
+    opciones JSONB NOT NULL,
+
+    respuesta_correcta CHAR(1) NOT NULL,
+
+    CONSTRAINT fk_pregunta_examen
+        FOREIGN KEY (id_examen)
+        REFERENCES examen(id_examen)
+);
+
+
+-- Índice para búsquedas por examen
+CREATE INDEX idx_pregunta_examen
+    ON pregunta(id_examen);
+
+
+CREATE TABLE intento_examen (
+    id_intento SERIAL PRIMARY KEY,
+    id_examen INT NOT NULL,
+    id_usuario INT NOT NULL,
+    numero_intento INT NOT NULL,
+    calificacion DECIMAL(5,2) NOT NULL,
+    fecha_realizacion TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_intento_examen_usuario_numero
+        UNIQUE (id_examen, id_usuario, numero_intento),
+
+    CONSTRAINT fk_intento_examen
+        FOREIGN KEY (id_examen)
+        REFERENCES examen(id_examen),
+
+    CONSTRAINT fk_intento_usuario
+        FOREIGN KEY (id_usuario)
+        REFERENCES usuario(id_usuario)
+);
+
+
+CREATE TABLE respuesta_usuario (
+    id_respuesta SERIAL PRIMARY KEY,
+    id_pregunta INT NOT NULL,
+    id_intento INT NOT NULL,
+    opcion_seleccionada CHAR(1) NOT NULL,
+    es_correcta BOOLEAN NOT NULL,
+
+    CONSTRAINT uq_respuesta_intento_pregunta
+        UNIQUE (id_intento, id_pregunta),
+
+    CONSTRAINT fk_respuesta_intento
+        FOREIGN KEY (id_intento)
+        REFERENCES intento_examen(id_intento),
+
+    CONSTRAINT fk_respuesta_pregunta
+        FOREIGN KEY (id_pregunta)
+        REFERENCES pregunta(id_pregunta)
+);
+
+
+INSERT INTO tema (nombre_tema, descripcion) VALUES 
+('Presupuesto Personal', 'Aprende a estructurar tus ingresos y egresos diarios para identificar fugas de dinero y mantener finanzas sanas.'),
+('Fondo de Emergencia', 'Estrategias prácticas para ahorrar y construir un colchón financiero que te proteja ante imprevistos y situaciones de crisis.'),
+('Tarjetas de Crédito', 'Domina el uso de las tarjetas de crédito a tu favor, evitando intereses moratorios y aprovechando fechas de corte.'),
+('Reducción y Control de Deudas', 'Métodos efectivos como el efecto bola de nieve y avalancha para salir de deudas de consumo de manera acelerada.'),
+('Ahorro', 'Técnicas de planeación financiera para alcanzar objetivos específicos como viajes, educación o la compra de bienes básicos.'),
+('Salud Financiera', 'Comprende cómo tus emociones y hábitos diarios influyen directamente en tus decisiones económicas y de gasto.'),
+('Organización de Finanzas', 'Métodos y comunicación efectiva para gestionar presupuestos compartidos y metas financieras comunes.');

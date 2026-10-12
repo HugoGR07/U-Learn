@@ -105,9 +105,9 @@ Requisitos OBLIGATORIOS de la guía:
 
     // Lista de modelos oficial para @google/genai
     const modelsToTry = [
-      'models/gemini-2.5-flash',
       'models/gemini-3.5-flash',
-      'models/gemini-3.6-flash'
+      'models/gemini-3.6-flash',
+      'models/gemini-3.7-flash'
     ];
 
     let response = null;

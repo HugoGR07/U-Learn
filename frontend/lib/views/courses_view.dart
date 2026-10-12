@@ -14,6 +14,7 @@ class CoursesView extends StatefulWidget {
 class _CoursesViewState extends State<CoursesView> {
   List<dynamic> _courses = [];
   bool _isLoading = true;
+  bool _hasWelcomed = false;
 
   // Obtiene el nombre real devuelto por la BD al hacer login
   String get _userName {
@@ -30,6 +31,38 @@ class _CoursesViewState extends State<CoursesView> {
     _loadUserAndCourses();
   }
 
+  // Muestra ÚNICAMENTE el banner flotante inferior de bienvenida por 3 segundos
+  void _mostrarBannerBienvenida() {
+    if (_hasWelcomed || !mounted) return;
+    _hasWelcomed = true;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Text('👋', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '¡Bienvenido de vuelta, $_userName!',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.all(20),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _loadUserAndCourses() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -42,11 +75,13 @@ class _CoursesViewState extends State<CoursesView> {
           _courses = coursesData;
           _isLoading = false;
         });
+        _mostrarBannerBienvenida();
       }
     } catch (e) {
       print('Error capturado en CoursesView: $e');
       if (mounted) {
         setState(() => _isLoading = false);
+        _mostrarBannerBienvenida();
         if (_courses.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -59,7 +94,7 @@ class _CoursesViewState extends State<CoursesView> {
     }
   }
 
-  /// Muestra el modal de notificaciones sin alterar el resto de la app
+  /// Muestra el modal de notificaciones exactamente como lo tenías originalmente
   void _showNotificationsModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -216,7 +251,6 @@ class _CoursesViewState extends State<CoursesView> {
                           color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
                           isCompleted: isCompleted,
                           onTap: () async {
-                            // 1. Extraer el idGuia asegurando que sea de tipo int
                             final rawId = course['id_guia'] ?? course['id'];
                             final int? idGuia = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
 
@@ -227,7 +261,6 @@ class _CoursesViewState extends State<CoursesView> {
                               return;
                             }
 
-                            // 2. Navegar a StudyView enviando la variable idGuia requerida
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -235,7 +268,6 @@ class _CoursesViewState extends State<CoursesView> {
                               ),
                             );
 
-                            // 3. Recargar el listado al volver para actualizar el progreso
                             _loadUserAndCourses();
                           },
                         );

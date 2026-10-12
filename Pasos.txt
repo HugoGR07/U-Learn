@@ -1,0 +1,37 @@
+Configurar backend:
+
+1. Entra a la carpeta del backend:
+cd backend
+
+2. Instala las dependencias del proyecto:
+npm install
+
+3. Crea el archivo de variables de entorno .env dentro de la carpeta backend/ con el siguiente contenido:
+PORT=3000
+DB_USER=postgres
+DB_PASSWORD=tu_contraseña_local
+DB_HOST=localhost
+DB_PORT=5432
+DB_DATABASE=ulearn_db
+JWT_SECRET=tu_clave_secreta_jwt (Esta creo que no la cambié jaja, la neta no se que va ahí pero el chat sí sabe)
+
+4. Inicia el servidor backend:
+npm start
+
+
+Configurar frontend:
+
+1. Navega a la carpeta de la aplicación móvil de Flutter:
+cd frontend
+
+2. Obten las dependencias de paquetes de Dart:
+flutter pub get
+
+3. Configuración de IP para conexión al backend:
+Si usas el emulador de Android, pon en baseUrl en lib/services/api_service.dart:
+static const String baseUrl = 'http://10.0.2.2:3000/api';
+Si usas tu computadora, cambia 10.0.2.2 por la dirección local de tu computadora (ejemplo: 127.0.0.1) (Creo que esa es la que le dejé jaja)
+Si usas tu teléfono, cambia 10.0.2.2 por la dirección IP local de tu computadora donde corre Node.js (ejemplo: http://192.168.1.50:3000/api).
+
+4. Ejecuta la aplicación:
+flutter run
