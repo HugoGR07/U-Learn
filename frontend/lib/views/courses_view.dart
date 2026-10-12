@@ -44,7 +44,7 @@ class _CoursesViewState extends State<CoursesView> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '¡Bienvenido de vuelta, $_userName!',
+                '¡Todo listo para empezar, $_userName!',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,

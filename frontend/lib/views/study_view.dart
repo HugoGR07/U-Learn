@@ -324,17 +324,80 @@ class _StudyViewState extends State<StudyView> {
                           examen: examen,
                           isUnlocked: isSectionCompleted,
                           onTap: () async {
-                            if (!isSectionCompleted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Debes completar todas las lecciones de esta sección para desbloquear el examen.',
-                                  ),
-                                  backgroundColor: Color(0xFFF59E0B),
-                                ),
-                              );
-                              return;
-                            }
+                          if (!isSectionCompleted) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icono de advertencia llamativo
+              const Icon(
+                Icons.lock_clock_rounded,
+                color: Color(0xFFF59E0B),
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              
+              // Título de la alerta
+              const Text(
+                'Sección bloqueada',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Tu mensaje exacto
+              const Text(
+                'Debes completar todas las lecciones de esta sección para desbloquear el examen.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Botón de Continuar
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D61E7),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Continuar',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return;
+  }
 
                             // Navegación a la vista del examen
                             final refresh = await Navigator.push(

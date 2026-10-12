@@ -140,24 +140,6 @@ class _ExamViewState extends State<ExamView> {
           }
         }
 
-  NotificationService.showProgress(
-    '¡Examen completado! ✅',
-    'Acertaste $buenas/$total preguntas ($pct%).',
-  );
-
-  // 4. Navegamos pasando las variables mapeadas a ResultView
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(
-      builder: (context) => ResultView(
-        totalPreguntas: total,
-        correctas: buenas,
-        incorrectas: malas,
-        porcentaje: pct,
-      ),
-    ),
-  );
-} else {
         final int? optIndexUsuario = _respuestasUsuario[i];
         String letraUsuario = '';
         String textoUsuario = '';
@@ -228,6 +210,11 @@ class _ExamViewState extends State<ExamView> {
         
         final num califRaw = resultado['calificacion'] ?? ((buenas / total) * 100);
         final int pct = califRaw.round();
+
+        NotificationService.showProgress(
+          '¡Examen completado! ✅',
+          'Acertaste $buenas/$total preguntas ($pct%).',
+        );
 
         Navigator.pushReplacement(
           context,
