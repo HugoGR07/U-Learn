@@ -144,9 +144,6 @@ class NotificationService {
 
   static int _toInt(dynamic v) => int.tryParse(v?.toString() ?? '') ?? 0;
 
-  static String _plural(int n, String uno, String varios) =>
-      '$n ${n == 1 ? uno : varios}';
-
   static List<(String, String)> _buildMessages(List<dynamic>? guias) {
     if (guias == null || guias.isEmpty) return [];
 
