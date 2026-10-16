@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'login_view.dart';
+import 'home_view.dart';
 import '../services/notification_service.dart';
 
 class ProfileView extends StatefulWidget {
@@ -34,6 +35,87 @@ class _ProfileViewState extends State<ProfileView> {
 
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // VENTANA FLOTANTE (mismo estilo que login, registro y recuperar contraseña)
+  void _showFloatingDialog({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    VoidCallback? onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    if (onConfirm != null) onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D61E7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Aceptar',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String get _fullName {
@@ -204,39 +286,51 @@ class _ProfileViewState extends State<ProfileView> {
                         ? null
                         : () async {
                             if (nombreCtrl.text.trim().isEmpty || paternoCtrl.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Nombre y Apellido Paterno son obligatorios')),
+                              _showFloatingDialog(
+                                title: 'Campos incompletos',
+                                message: 'El nombre y el apellido paterno son obligatorios.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             setModalState(() => isSaving = true);
 
-                            final res = await ApiService.updateProfile(
-                              nombre: nombreCtrl.text.trim(),
-                              apellidoPaterno: paternoCtrl.text.trim(),
-                              apellidoMaterno: maternoCtrl.text.trim(),
-                            );
-
-                            setModalState(() => isSaving = false);
+                            Map<String, dynamic> res;
+                            try {
+                              res = await ApiService.updateProfile(
+                                nombre: nombreCtrl.text.trim(),
+                                apellidoPaterno: paternoCtrl.text.trim(),
+                                apellidoMaterno: maternoCtrl.text.trim(),
+                              );
+                            } catch (_) {
+                              if (!mounted) return;
+                              setModalState(() => isSaving = false);
+                              _showFloatingDialog(
+                                title: 'Error de conexión',
+                                message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
+                                isSuccess: false,
+                              );
+                              return;
+                            }
 
                             if (!mounted) return;
-                            Navigator.pop(context);
+                            setModalState(() => isSaving = false);
 
-                            if (res['success']) {
+                            if (res['success'] == true) {
+                              Navigator.pop(context); // Cierra el formulario solo si se guardó
                               setState(() {}); // Actualiza la pantalla principal con el nuevo nombre
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: const Color(0xFF10B981),
-                                ),
+                              _showFloatingDialog(
+                                title: '¡Datos actualizados! 🎉',
+                                message: 'Tu información personal se guardó correctamente.',
+                                isSuccess: true,
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: Colors.red,
-                                ),
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudieron actualizar tus datos, inténtalo de nuevo.',
+                                isSuccess: false,
                               );
                             }
                           },
@@ -328,46 +422,67 @@ class _ProfileViewState extends State<ProfileView> {
                             final confirmPass = confirmPassController.text.trim();
 
                             if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Por favor completa todos los campos')),
+                              _showFloatingDialog(
+                                title: 'Campos incompletos',
+                                message: 'Por favor, completa todos los campos para continuar.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             if (newPass != confirmPass) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Las nuevas contraseñas no coinciden')),
+                              _showFloatingDialog(
+                                title: 'Contraseñas incorrectas',
+                                message: 'Las nuevas contraseñas no coinciden, verifícalas.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             if (newPass.length < 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres')),
+                              _showFloatingDialog(
+                                title: 'Contraseña débil',
+                                message: 'La contraseña debe tener al menos 6 caracteres.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             setModalState(() => isChanging = true);
-                            final res = await ApiService.changePassword(
-                              currentPassword: currentPass,
-                              newPassword: newPass,
-                            );
-                            setModalState(() => isChanging = false);
+
+                            Map<String, dynamic> res;
+                            try {
+                              res = await ApiService.changePassword(
+                                currentPassword: currentPass,
+                                newPassword: newPass,
+                              );
+                            } catch (_) {
+                              if (!mounted) return;
+                              setModalState(() => isChanging = false);
+                              _showFloatingDialog(
+                                title: 'Error de conexión',
+                                message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
+                                isSuccess: false,
+                              );
+                              return;
+                            }
 
                             if (!mounted) return;
-                            Navigator.pop(context);
+                            setModalState(() => isChanging = false);
 
-                            if (res['success']) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: const Color(0xFF10B981),
-                                ),
+                            if (res['success'] == true) {
+                              Navigator.pop(context); // Cierra el formulario solo si se guardó
+                              _showFloatingDialog(
+                                title: '¡Contraseña actualizada! 🎉',
+                                message: 'Tu contraseña se cambió correctamente.',
+                                isSuccess: true,
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res['message']), backgroundColor: Colors.red),
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudo cambiar la contraseña, verifica tu contraseña actual.',
+                                isSuccess: false,
                               );
                             }
                           },
@@ -571,30 +686,45 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 
+  // Limpia la sesión y deja la pila de navegación como al abrir la app:
+  // HomeView (base) -> LoginView. Así el botón "atrás" del login sigue funcionando.
+  void _cerrarSesion() {
+    ApiService.token = null;
+    ApiService.currentUser = null;
+
+    final navigator = Navigator.of(context);
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeView()),
+      (route) => false,
+    );
+    navigator.push(
+      MaterialPageRoute(builder: (_) => const LoginView()),
+    );
+  }
+
   // 6. Confirmación de Cerrar Sesión
+  bool _cerrandoSesion = false;
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('¿Cerrar sesión?', style: TextStyle(fontWeight: FontWeight.bold)),
           content: const Text('Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancelar', style: TextStyle(color: Color(0xFF64748B))),
             ),
             ElevatedButton(
               onPressed: () {
-                ApiService.token = null;
-                ApiService.currentUser = null;
-
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginView()),
-                  (route) => false,
-                );
+                // Evita que un doble toque dispare el cierre de sesión dos veces
+                if (_cerrandoSesion) return;
+                _cerrandoSesion = true;
+                Navigator.pop(dialogContext);
+                _cerrarSesion();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEF4444),

@@ -75,6 +75,16 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  // Ignora toques mientras la pantalla todavía está entrando (animación).
+  // Evita que un toque "fantasma" (p. ej. el doble toque en "Cerrar sesión")
+  // caiga sobre "¿Olvidaste tu contraseña?" y abra esa pantalla sin querer.
+  bool get _pantallaLista {
+    final route = ModalRoute.of(context);
+    if (route == null) return true;
+    final animacionTerminada = route.animation?.status == AnimationStatus.completed;
+    return route.isCurrent && animacionTerminada;
+  }
+
   // VENTANA FLOTANTE VISIBLE Y BONITA PARA MENSAJES DE LOGIN
   void _showFloatingDialog({
     required String title,
@@ -324,6 +334,7 @@ class _LoginViewState extends State<LoginView> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {
+                    if (!_pantallaLista) return;
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const ForgotpssView()),
@@ -391,6 +402,7 @@ class _LoginViewState extends State<LoginView> {
                   ),
                   GestureDetector(
                     onTap: () {
+                      if (!_pantallaLista) return;
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(builder: (context) => const RegisterView()),

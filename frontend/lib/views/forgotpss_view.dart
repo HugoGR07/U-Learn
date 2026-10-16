@@ -32,11 +32,83 @@ class _ForgotpssViewState extends State<ForgotpssView> {
     super.dispose();
   }
 
-  void _mensaje(String texto, {bool error = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(texto),
-        backgroundColor: error ? Colors.red : const Color(0xFF10B981),
+  // VENTANA FLOTANTE (mismo estilo que login y registro)
+  void _showFloatingDialog({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    VoidCallback? onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _oscuro,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: _gris,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    if (onConfirm != null) onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _azul,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Aceptar',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -44,63 +116,135 @@ class _ForgotpssViewState extends State<ForgotpssView> {
   Future<void> _enviarCodigo() async {
     final correo = _emailController.text.trim();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(correo)) {
-      _mensaje('Ingresa un correo electrónico válido');
+      _showFloatingDialog(
+        title: 'Correo inválido',
+        message: 'Ingresa un correo electrónico válido para continuar.',
+        isSuccess: false,
+      );
       return;
     }
     setState(() => _cargando = true);
-    final res = await ApiService.forgotPassword(correo);
-    if (!mounted) return;
-    setState(() => _cargando = false);
-    if (res['success'] == true) {
-      _codigoController.clear();
-      setState(() => _paso = 1);
-      _mensaje(res['message'], error: false);
-    } else {
-      _mensaje(res['message']);
+    try {
+      final res = await ApiService.forgotPassword(correo);
+      if (!mounted) return;
+      setState(() => _cargando = false);
+      if (res['success'] == true) {
+        _codigoController.clear();
+        setState(() => _paso = 1);
+        _showFloatingDialog(
+          title: 'Código enviado 📩',
+          message: res['message']?.toString() ??
+              'Te enviamos un código de 6 dígitos a tu correo.',
+          isSuccess: true,
+        );
+      } else {
+        _showFloatingDialog(
+          title: 'Aviso',
+          message: res['message']?.toString() ??
+              'No se pudo enviar el código, inténtalo de nuevo.',
+          isSuccess: false,
+        );
+      }
+    } catch (_) {
+      _errorConexion();
     }
   }
 
   Future<void> _verificarCodigo() async {
     final codigo = _codigoController.text.trim();
     if (codigo.length != 6) {
-      _mensaje('Ingresa el código de 6 dígitos');
+      _showFloatingDialog(
+        title: 'Código incompleto',
+        message: 'Ingresa el código de 6 dígitos que te enviamos.',
+        isSuccess: false,
+      );
       return;
     }
     setState(() => _cargando = true);
-    final res = await ApiService.verifyResetCode(_emailController.text.trim(), codigo);
-    if (!mounted) return;
-    setState(() => _cargando = false);
-    if (res['success'] == true) {
-      setState(() => _paso = 2);
-    } else {
-      _mensaje(res['message']);
+    try {
+      final res = await ApiService.verifyResetCode(_emailController.text.trim(), codigo);
+      if (!mounted) return;
+      setState(() => _cargando = false);
+      if (res['success'] == true) {
+        setState(() => _paso = 2);
+      } else {
+        _showFloatingDialog(
+          title: 'Código incorrecto',
+          message: res['message']?.toString() ??
+              'El código no es válido o ya venció, verifícalo.',
+          isSuccess: false,
+        );
+      }
+    } catch (_) {
+      _errorConexion();
     }
   }
 
   Future<void> _cambiarContrasena() async {
     final pass = _passController.text;
+    if (pass.isEmpty || _pass2Controller.text.isEmpty) {
+      _showFloatingDialog(
+        title: 'Campos incompletos',
+        message: 'Por favor, escribe y confirma tu nueva contraseña.',
+        isSuccess: false,
+      );
+      return;
+    }
     if (pass.length < 6) {
-      _mensaje('La contraseña debe tener al menos 6 caracteres');
+      _showFloatingDialog(
+        title: 'Contraseña débil',
+        message: 'La contraseña debe tener al menos 6 caracteres.',
+        isSuccess: false,
+      );
       return;
     }
     if (pass != _pass2Controller.text) {
-      _mensaje('Las contraseñas no coinciden');
+      _showFloatingDialog(
+        title: 'Contraseñas incorrectas',
+        message: 'Las contraseñas no coinciden, verifícalas.',
+        isSuccess: false,
+      );
       return;
     }
     setState(() => _cargando = true);
-    final res = await ApiService.resetPassword(
-      correo: _emailController.text.trim(),
-      codigo: _codigoController.text.trim(),
-      nuevaContrasena: pass,
-    );
+    try {
+      final res = await ApiService.resetPassword(
+        correo: _emailController.text.trim(),
+        codigo: _codigoController.text.trim(),
+        nuevaContrasena: pass,
+      );
+      if (!mounted) return;
+      setState(() => _cargando = false);
+      if (res['success'] == true) {
+        _showFloatingDialog(
+          title: '¡Contraseña actualizada! 🎉',
+          message: 'Tu contraseña se cambió correctamente, inicia sesión para ingresar.',
+          isSuccess: true,
+          onConfirm: () {
+            if (mounted) Navigator.pop(context);
+          },
+        );
+      } else {
+        _showFloatingDialog(
+          title: 'Aviso',
+          message: res['message']?.toString() ??
+              'No se pudo cambiar la contraseña, inténtalo de nuevo.',
+          isSuccess: false,
+        );
+      }
+    } catch (_) {
+      _errorConexion();
+    }
+  }
+
+  void _errorConexion() {
     if (!mounted) return;
     setState(() => _cargando = false);
-    if (res['success'] == true) {
-      _mensaje(res['message'], error: false);
-      Navigator.pop(context);
-    } else {
-      _mensaje(res['message']);
-    }
+    _showFloatingDialog(
+      title: 'Error de conexión',
+      message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
+      isSuccess: false,
+    );
   }
 
   void _atras() {

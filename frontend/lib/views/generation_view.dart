@@ -160,7 +160,7 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
                 // Subtítulo
                 Text(
-                  'Nuestra IA está creando un plan de estudio\nespecial sobre "${widget.selectedTopic}".',
+                  'La IA está creando un plan de estudio\nespecial sobre "${widget.selectedTopic}".',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 14,

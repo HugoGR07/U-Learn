@@ -240,9 +240,14 @@ class _CoursesViewState extends State<CoursesView> {
                         final double progress = total > 0 ? (completadas / total) : 0.0;
                         final String progressPercentage = '${(progress * 100).toInt()}%';
                         final bool isCompleted = progress >= 1.0 && total > 0;
+                        final String nombreTema =
+                            (course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio').toString();
+                        final style = _getTopicStyle(nombreTema);
 
                         return _buildCourseCard(
-                          title: course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio',
+                          title: nombreTema,
+                          topicIcon: style['icon'] as IconData,
+                          topicColor: style['color'] as Color,
                           progress: progress,
                           progressText: progressPercentage,
                           timeRemaining: total > 0 
@@ -433,8 +438,31 @@ class _CoursesViewState extends State<CoursesView> {
     );
   }
 
+  // Mismos íconos y colores que se usan al crear la guía (TopicsView)
+  Map<String, dynamic> _getTopicStyle(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('ahorro')) {
+      return {'icon': Icons.savings_rounded, 'color': const Color(0xFFEC4899)};
+    } else if (lower.contains('tarjeta')) {
+      return {'icon': Icons.credit_card_rounded, 'color': const Color(0xFFD97706)};
+    } else if (lower.contains('presupuesto')) {
+      return {'icon': Icons.calculate_rounded, 'color': const Color(0xFF16A34A)};
+    } else if (lower.contains('deuda') || lower.contains('interés')) {
+      return {'icon': Icons.percent_rounded, 'color': const Color(0xFF2563EB)};
+    } else if (lower.contains('personal') || lower.contains('finanza')) {
+      return {'icon': Icons.person_rounded, 'color': const Color(0xFF0284C7)};
+    } else if (lower.contains('historial') || lower.contains('crédito')) {
+      return {'icon': Icons.shield_rounded, 'color': const Color(0xFFE11D48)};
+    } else if (lower.contains('planeación') || lower.contains('planeacion')) {
+      return {'icon': Icons.track_changes_rounded, 'color': const Color(0xFFEA580C)};
+    }
+    return {'icon': Icons.account_balance_wallet_rounded, 'color': const Color(0xFF1D61E7)};
+  }
+
   Widget _buildCourseCard({
     required String title,
+    required IconData topicIcon,
+    required Color topicColor,
     required double progress,
     required String progressText,
     required String timeRemaining,
@@ -467,12 +495,12 @@ class _CoursesViewState extends State<CoursesView> {
               height: 44,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
+                color: topicColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                isCompleted ? Icons.workspace_premium_rounded : Icons.school_rounded,
-                color: color,
+                topicIcon,
+                color: topicColor,
                 size: 24,
               ),
             ),
