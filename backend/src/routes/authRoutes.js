@@ -5,10 +5,10 @@ const authMiddleware = require('../middlewares/authMiddleware');
 const { authLimiter } = require('../middlewares/limits');
 
 // Registro de usuario
-router.post('/register', authLimiter, authController.register);
+router.post('/register', authController.register);
 
 // Inicio de sesión
-router.post('/login', authLimiter, authController.login);
+router.post('/login', authController.login);
 
 router.post('/forgot-password', authLimiter, authController.forgotPassword);
 router.post('/verify-reset-code', authLimiter, authController.verifyResetCode);
