@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: '',
+    defaultValue: 'https://ulearnbackend.vercel.app/api',
   );
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
@@ -46,22 +46,26 @@ class ApiService {
     required String correo,
     required String contrasena,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'correo': correo,
-        'contrasena': contrasena,
-      }),
-    );
+    try {
+        final response = await http.post(
+        Uri.parse('$baseUrl/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+            'correo': correo,
+            'contrasena': contrasena,
+          }),
+        );
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      token = data['token']; // Almacenar Token JWT
-      currentUser = data['user']; // Almacenar información del usuario
-      return {'success': true, 'user': currentUser};
-    } else {
-      return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
+        final data = jsonDecode(response.body);
+        if (response.statusCode == 200) {
+          token = data['token']; // Almacenar Token JWT
+          currentUser = data['user']; // Almacenar información del usuario
+          return {'success': true, 'user': currentUser};
+        } else {
+          return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
+        }
+    } catch (e){
+      return {'success': false, 'message': 'No se pudo conectar con el servidor:{$e}'};
     }
   }
 
