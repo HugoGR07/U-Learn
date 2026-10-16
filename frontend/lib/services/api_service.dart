@@ -324,4 +324,40 @@ class ApiService {
       return false;
     }
   }
+  static Future<String> askAiTutor({
+  required String prompt,
+  required List<Map<String, dynamic>> examenCompleto,
+  required List<Map<String, dynamic>> errores,
+}) async {
+  final url = Uri.parse('$baseUrl/exam/tutor-ia');
+  
+  try {
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'prompt': prompt,
+        'examen_completo': examenCompleto,
+        'errores': errores,
+      }),
+    );
+
+    // 🔍 Imprimimos en la consola de Flutter qué devolvió el servidor
+    print('STATUS CODE: ${response.statusCode}');
+    print('RESPONSE BODY: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['respuesta'] ?? '';
+    } else {
+      throw Exception('Error del servidor: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('EXCEPCIÓN DETECTADA: $e');
+    rethrow;
+  }
+}
 }
