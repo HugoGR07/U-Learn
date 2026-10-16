@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Para emulador Android usa 10.0.2.2. Si pruebas en dispositivo físico, usa tu IP local (ej. 192.168.x.x)
-  static const String baseUrl = 'http://192.168.1.67:3000/api';
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: '',
+  );
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
 
