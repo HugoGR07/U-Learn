@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 const guideController = require('../controllers/guideController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { guideDailyLimit } = require('../middlewares/limits');
 
 // Ruta para obtener la lista de temas desde la BD
 router.get('/topics', authMiddleware, guideController.getTopics);
 
 // Generar una nueva guía con OpenAI y guardarla en la BD
-router.post('/generate', authMiddleware, guideController.generateCourse);
+router.post('/generate', authMiddleware, guideDailyLimit, guideController.generateCourse);
 
 // Obtener la lista de guías del usuario
 router.get('/my-guides', authMiddleware, guideController.getUserGuides);

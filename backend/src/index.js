@@ -1,15 +1,16 @@
-require('./jobs/weeklySummary');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-const { runWeeklySummary } = require('./jobs/weeklySummary');
 
+const { runWeeklySummary } = require('./jobs/weeklySummary');
 // 1. Importar los archivos de rutas
 const authRoutes = require('./routes/authRoutes');
 const examRoutes = require('./routes/examRoutes');
 const guideRoutes = require('./routes/guideRoutes');
 
 const app = express();
+
+app.set('trust proxy', 1);
 
 // Middlewares
 app.use(cors());

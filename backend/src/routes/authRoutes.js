@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { authLimiter } = require('../middlewares/limits');
 
 // Registro de usuario
-router.post('/register', authController.register);
+router.post('/register', authLimiter, authController.register);
 
 // Inicio de sesión
-router.post('/login', authController.login);
+router.post('/login', authLimiter, authController.login);
 
 // Perfil de usuario (requiere token JWT)
 router.get('/me', authMiddleware, authController.getProfile);
