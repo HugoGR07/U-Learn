@@ -47,25 +47,25 @@ class ApiService {
     required String contrasena,
   }) async {
     try {
-        final response = await http.post(
+      final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-            'correo': correo,
-            'contrasena': contrasena,
-          }),
-        );
+          'correo': correo,
+          'contrasena': contrasena,
+        }),
+      );
 
-        final data = jsonDecode(response.body);
-        if (response.statusCode == 200) {
-          token = data['token']; // Almacenar Token JWT
-          currentUser = data['user']; // Almacenar información del usuario
-          return {'success': true, 'user': currentUser};
-        } else {
-          return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
-        }
-    } catch (e){
-      return {'success': false, 'message': 'No se pudo conectar con el servidor:{$e}'};
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        token = data['token']; // Almacenar Token JWT
+        currentUser = data['user']; // Almacenar información del usuario
+        return {'success': true, 'user': currentUser};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'No se pudo conectar con el servidor: $e'};
     }
   }
 
@@ -244,7 +244,7 @@ class ApiService {
     }
   }
 
-    /// Registrar que el usuario abrió/empezó una sección
+  /// Registrar que el usuario abrió/empezó una sección
   static Future<bool> startSection(int idSeccion) async {
     try {
       final response = await http.post(
@@ -295,7 +295,6 @@ class ApiService {
     }
   }
 
-
   static Future<bool?> getNotificationSettings() async {
     try {
       final r = await http.get(
@@ -324,40 +323,79 @@ class ApiService {
       return false;
     }
   }
+
+  // TUTOR IA
   static Future<String> askAiTutor({
-  required String prompt,
-  required List<Map<String, dynamic>> examenCompleto,
-  required List<Map<String, dynamic>> errores,
-}) async {
-  final url = Uri.parse('$baseUrl/exam/tutor-ia');
-  
-  try {
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'prompt': prompt,
-        'examen_completo': examenCompleto,
-        'errores': errores,
-      }),
-    );
+    required String prompt,
+    required List<Map<String, dynamic>> examenCompleto,
+    required List<Map<String, dynamic>> errores,
+  }) async {
+    final url = Uri.parse('$baseUrl/exam/tutor-ia');
 
-    // 🔍 Imprimimos en la consola de Flutter qué devolvió el servidor
-    print('STATUS CODE: ${response.statusCode}');
-    print('RESPONSE BODY: ${response.body}');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'prompt': prompt,
+          'examen_completo': examenCompleto,
+          'errores': errores,
+        }),
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['respuesta'] ?? '';
-    } else {
-      throw Exception('Error del servidor: ${response.statusCode}');
+      // Imprimimos en la consola de Flutter qué devolvió el servidor
+      print('STATUS CODE: ${response.statusCode}');
+      print('RESPONSE BODY: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['respuesta'] ?? '';
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('EXCEPCIÓN DETECTADA: $e');
+      rethrow;
     }
-  } catch (e) {
-    print('EXCEPCIÓN DETECTADA: $e');
-    rethrow;
   }
-}
+
+  // RECUPERACIÓN DE CONTRASEÑA (rutas públicas, sin token)
+  static Future<Map<String, dynamic>> _postPublico(String ruta, Map<String, dynamic> body) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl$ruta'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
+      final data = jsonDecode(response.body);
+      return {
+        'success': response.statusCode == 200,
+        'message': data['message'] ?? 'Ocurrió un error',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'No se pudo conectar con el servidor'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> forgotPassword(String correo) =>
+      _postPublico('/auth/forgot-password', {'correo': correo});
+
+  static Future<Map<String, dynamic>> verifyResetCode(String correo, String codigo) =>
+      _postPublico('/auth/verify-reset-code', {'correo': correo, 'codigo': codigo});
+
+  static Future<Map<String, dynamic>> resetPassword({
+    required String correo,
+    required String codigo,
+    required String nuevaContrasena,
+  }) =>
+      _postPublico('/auth/reset-password', {
+        'correo': correo,
+        'codigo': codigo,
+        'nuevaContrasena': nuevaContrasena,
+      });
 }
