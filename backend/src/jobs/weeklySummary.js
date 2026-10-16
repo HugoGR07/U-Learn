@@ -180,8 +180,10 @@ async function runWeeklySummary({ idUsuario } = {}) {
   return { enviados };
 }
 
-cron.schedule('0 9 * * 1', () => runWeeklySummary(), {
-  timezone: 'America/Mexico_City',
-});
+if (!process.env.VERCEL) {
+  cron.schedule('0 9 * * 1', () => runWeeklySummary(), {
+    timezone: 'America/Mexico_City',
+  });
+}
 
 module.exports = { runWeeklySummary };

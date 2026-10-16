@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Para emulador Android usa 10.0.2.2. Si pruebas en dispositivo físico, usa tu IP local (ej. 192.168.x.x)
-  static const String baseUrl = 'http://127.0.0.1:3000/api';
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'https://ulearnbackend.vercel.app/api',
+  );
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
 
@@ -44,22 +46,26 @@ class ApiService {
     required String correo,
     required String contrasena,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'correo': correo,
-        'contrasena': contrasena,
-      }),
-    );
+    try {
+        final response = await http.post(
+        Uri.parse('$baseUrl/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+            'correo': correo,
+            'contrasena': contrasena,
+          }),
+        );
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      token = data['token']; // Almacenar Token JWT
-      currentUser = data['user']; // Almacenar información del usuario
-      return {'success': true, 'user': currentUser};
-    } else {
-      return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
+        final data = jsonDecode(response.body);
+        if (response.statusCode == 200) {
+          token = data['token']; // Almacenar Token JWT
+          currentUser = data['user']; // Almacenar información del usuario
+          return {'success': true, 'user': currentUser};
+        } else {
+          return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
+        }
+    } catch (e){
+      return {'success': false, 'message': 'No se pudo conectar con el servidor:{$e}'};
     }
   }
 
