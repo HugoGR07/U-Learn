@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'https://ulearnbackend.vercel.app/',
+    defaultValue: '',
   );
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
