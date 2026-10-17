@@ -92,7 +92,15 @@ exports.getProfile = async (req, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    res.json({ user: userResult.rows[0] });
+    const user = userResult.rows[0];
+
+    const token = jwt.sign(
+      { id_usuario: user.id_usuario, apellido_paterno: user.apellido_paterno, apellido_materno: user.apellido_materno, correo: user.correo },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ user, token });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener datos del perfil' });

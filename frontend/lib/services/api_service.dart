@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'session_service.dart';
 
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
@@ -8,6 +9,48 @@ class ApiService {
   );
   static String? token; // Guardará el JWT tras el login
   static Map<String, dynamic>? currentUser;
+
+  static void Function()? onSessionExpired;
+
+  static Future<bool> restoreSession() async {
+    final saved = await SessionService.load();
+    if (saved == null) return false;
+
+    token = saved.token;
+    currentUser = saved.user;
+    _validarSesionConServidor();
+    return true;
+  }
+
+  static Future<void> _validarSesionConServidor() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['user'] != null) {
+          currentUser = Map<String, dynamic>.from(data['user']);
+          await SessionService.saveUser(currentUser!);
+        }
+        if (data['token'] is String) {
+          token = data['token'];
+          await SessionService.saveToken(token!);
+        }
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        await logout();
+        onSessionExpired?.call();
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> logout() async {
+    token = null;
+    currentUser = null;
+    await SessionService.clear();
+  }
 
   // 1. REGISTRO DE USUARIO
   static Future<Map<String, dynamic>> register({
@@ -60,6 +103,7 @@ class ApiService {
       if (response.statusCode == 200) {
         token = data['token']; // Almacenar Token JWT
         currentUser = data['user']; // Almacenar información del usuario
+        await SessionService.save(token!, currentUser);
         return {'success': true, 'user': currentUser};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Error al iniciar sesión'};
@@ -130,6 +174,7 @@ class ApiService {
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
         currentUser = data['user']; // Actualizar datos locales del usuario
+        if (currentUser != null) await SessionService.saveUser(currentUser!);
         return {'success': true, 'message': data['message']};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Error al actualizar'};
@@ -153,6 +198,7 @@ class ApiService {
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
         currentUser = data['user'];
+        if (currentUser != null) await SessionService.saveUser(currentUser!);
         return {'success': true, 'message': data['message']};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Error al guardar la foto'};

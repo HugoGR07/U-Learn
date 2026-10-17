@@ -831,8 +831,7 @@ class _ProfileViewState extends State<ProfileView> {
   // Limpia la sesión y deja la pila de navegación como al abrir la app:
   // HomeView (base) -> LoginView. Así el botón "atrás" del login sigue funcionando.
   void _cerrarSesion() {
-    ApiService.token = null;
-    ApiService.currentUser = null;
+    ApiService.logout();
 
     final navigator = Navigator.of(context);
     navigator.pushAndRemoveUntil(
