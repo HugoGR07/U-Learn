@@ -69,6 +69,7 @@ exports.login = async (req, res) => {
         apellido_paterno: user.apellido_paterno,
         apellido_materno: user.apellido_materno,
         correo: user.correo,
+        foto_perfil: user.foto_perfil,
       },
     });
   } catch (error) {
@@ -81,7 +82,7 @@ exports.login = async (req, res) => {
 exports.getProfile = async (req, res) => {
   try {
     const userResult = await db.query(
-      `SELECT id_usuario, nombre, apellido_paterno, apellido_materno, correo 
+      `SELECT id_usuario, nombre, apellido_paterno, apellido_materno, correo, foto_perfil 
        FROM usuario 
        WHERE id_usuario = $1`,
       [req.user.id_usuario]
@@ -112,7 +113,7 @@ exports.updateProfile = async (req, res) => {
       `UPDATE usuario 
        SET nombre = $1, apellido_paterno = $2, apellido_materno = $3 
        WHERE id_usuario = $4 
-       RETURNING id_usuario, nombre, apellido_paterno, apellido_materno, correo`,
+       RETURNING id_usuario, nombre, apellido_paterno, apellido_materno, correo, foto_perfil`,
       [nombre, apellido_paterno, apellido_materno || '', id_usuario]
     );
 
@@ -123,6 +124,29 @@ exports.updateProfile = async (req, res) => {
   } catch (error) {
     console.error('Error al actualizar perfil:', error);
     res.status(500).json({ message: 'Error interno al actualizar perfil' });
+  }
+};
+
+exports.updateProfilePhoto = async (req, res) => {
+  const foto = Number(req.body.foto_perfil);
+  if (!Number.isInteger(foto) || foto < 1 || foto > 10) {
+    return res.status(400).json({ message: 'Foto de perfil inválida' });
+  }
+  try {
+    const result = await db.query(
+      `UPDATE usuario
+       SET foto_perfil = $1
+       WHERE id_usuario = $2
+       RETURNING id_usuario, nombre, apellido_paterno, apellido_materno, correo, foto_perfil`,
+      [foto, req.user.id_usuario]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    res.json({ message: 'Foto de perfil actualizada', user: result.rows[0] });
+  } catch (error) {
+    console.error('Error al actualizar foto de perfil:', error);
+    res.status(500).json({ message: 'Error al guardar la foto de perfil' });
   }
 };
 

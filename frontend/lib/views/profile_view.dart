@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import 'login_view.dart';
 import 'home_view.dart';
 import '../services/notification_service.dart';
+import '../widgets/foto_perfil.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -347,6 +348,147 @@ class _ProfileViewState extends State<ProfileView> {
                           )
                         : const Text(
                             'Actualizar datos',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showFotoPerfilModal() {
+    int? seleccion = FotoPerfil.desdeUsuario(ApiService.currentUser);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.photo_camera_outlined, color: Color(0xFF1D61E7)),
+                          SizedBox(width: 8),
+                          Text(
+                            'Foto de perfil',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  const Text(
+                    'Elige una de las imágenes disponibles:',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 14),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: FotoPerfil.total,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 5,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                    ),
+                    itemBuilder: (context, index) {
+                      final numero = index + 1;
+                      final isSelected = seleccion == numero;
+                      return GestureDetector(
+                        onTap: isSaving ? null : () => setModalState(() => seleccion = numero),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Stack(
+                            children: [
+                              FotoPerfil(numero: numero, size: constraints.maxWidth),
+                              if (isSelected)
+                                const Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: CircleAvatar(
+                                    radius: 11,
+                                    backgroundColor: Colors.white,
+                                    child: CircleAvatar(
+                                      radius: 9,
+                                      backgroundColor: Color(0xFF1D61E7),
+                                      child: Icon(Icons.check, size: 13, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: isSaving || seleccion == null
+                        ? null
+                        : () async {
+                            setModalState(() => isSaving = true);
+                            final res = await ApiService.updateProfilePhoto(seleccion!);
+                            if (!mounted) return;
+                            setModalState(() => isSaving = false);
+
+                            if (res['success'] == true) {
+                              Navigator.pop(context);
+                              setState(() {});
+                              _showFloatingDialog(
+                                title: '¡Foto actualizada! 🎉',
+                                message: 'Tu nueva foto de perfil se guardó correctamente.',
+                                isSuccess: true,
+                              );
+                            } else {
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudo guardar tu foto, inténtalo de nuevo.',
+                                isSuccess: false,
+                              );
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      backgroundColor: const Color(0xFF1D61E7),
+                      disabledBackgroundColor: const Color(0xFF93B4F5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Guardar foto',
                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                   ),
@@ -750,42 +892,46 @@ class _ProfileViewState extends State<ProfileView> {
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                Container(
-                  height: 140, // Altura reducida para recortar el espacio superior
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1D61E7),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(24),
-                      bottomRight: Radius.circular(24),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 55),
+                  child: Container(
+                    height: 150, // Altura reducida para recortar el espacio superior
+                    width: double.infinity,
+                    alignment: Alignment.topCenter,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1D61E7),
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(24),
+                        bottomRight: Radius.circular(24),
+                      ),
                     ),
-                  ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            onPressed: () => Navigator.maybePop(context),
-                          ),
-                          const Expanded(
-                            child: Text(
-                              'Mi perfil',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
                                 color: Colors.white,
+                                size: 20,
+                              ),
+                              onPressed: () => Navigator.maybePop(context),
+                            ),
+                            const Expanded(
+                              child: Text(
+                                'Mi perfil',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 48), // Balance con botón atrás
-                        ],
+                            const SizedBox(width: 48), // Balance con botón atrás
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -793,35 +939,65 @@ class _ProfileViewState extends State<ProfileView> {
 
                 // Avatar Circular sobrepuesto
                 Positioned(
-                  bottom: -45,
-                  child: Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0C097),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                  bottom: 0,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _showFotoPerfilModal,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 110,
+                          height: 110,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDBA74),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: FotoPerfil(
+                            numero: FotoPerfil.desdeUsuario(ApiService.currentUser),
+                            size: 103,
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _showFotoPerfilModal,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1D61E7),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.12),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.edit_rounded, size: 18, color: Colors.white),
+                            ),
+                          ),
                         ),
                       ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.face_rounded,
-                        size: 64,
-                        color: Color(0xFF334155),
-                      ),
                     ),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 52),
+            const SizedBox(height: 7),
 
             // 2. Información del Usuario (Dinámica)
             Text(
@@ -854,6 +1030,12 @@ class _ProfileViewState extends State<ProfileView> {
                     icon: Icons.person_outline_rounded,
                     title: 'Información personal',
                     onTap: _showPersonalInfoModal,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildProfileOption(
+                    icon: Icons.photo_camera_outlined,
+                    title: 'Foto de perfil',
+                    onTap: _showFotoPerfilModal,
                   ),
                   const SizedBox(height: 12),
                   _buildProfileOption(

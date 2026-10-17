@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import 'topics_view.dart';
 import 'profile_view.dart'; 
 import 'study_view.dart';
+import '../widgets/foto_perfil.dart';
 
 class CoursesView extends StatefulWidget {
   const CoursesView({super.key});
@@ -417,18 +418,18 @@ class _CoursesViewState extends State<CoursesView> {
               const SizedBox(width: 12),
               // Foto de perfil -> Navega a la vista de perfil
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
+                onTap: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const ProfileView(),
                     ),
                   );
+                  if (mounted) setState(() {});
                 },
-                child: const CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Color(0xFFFDBA74),
-                  child: Icon(Icons.person, color: Colors.white, size: 20),
+                child: FotoPerfil(
+                  numero: FotoPerfil.desdeUsuario(ApiService.currentUser),
+                  size: 50,
                 ),
               ),
             ],

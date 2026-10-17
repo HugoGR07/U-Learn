@@ -18,6 +18,7 @@ router.post('/reset-password', authLimiter, authController.resetPassword);
 router.get('/me', authMiddleware, authController.getProfile);
 
 router.put('/update-profile', authMiddleware, authController.updateProfile);
+router.put('/profile-photo', authMiddleware, authController.updateProfilePhoto);
 router.put('/change-password', authMiddleware, authController.changePassword);
 
 router.get('/notification-settings', authMiddleware, authController.getNotificationSettings);

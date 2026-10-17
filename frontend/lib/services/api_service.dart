@@ -139,6 +139,29 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> updateProfilePhoto(int fotoPerfil) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/profile-photo'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'foto_perfil': fotoPerfil}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        currentUser = data['user'];
+        return {'success': true, 'message': data['message']};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Error al guardar la foto'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'No se pudo conectar con el servidor'};
+    }
+  }
+
   // Cambiar contraseña en la base de datos
   static Future<Map<String, dynamic>> changePassword({
     required String currentPassword,
