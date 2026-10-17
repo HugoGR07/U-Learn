@@ -192,7 +192,11 @@ class ApiService {
   }
 
   /// Método para generar un nuevo curso / guía de estudio mediante la API de Gemini
-  static Future<Map<String, dynamic>> generateCourse(String tema, {String nivel = 'Intermedio'}) async {
+  static Future<Map<String, dynamic>> generateCourse(
+    String tema, {
+    String nivel = 'Intermedio',
+    int duracionSemanas = 4,
+  }) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/guides/generate'),
@@ -203,6 +207,7 @@ class ApiService {
         body: jsonEncode({
           'tema': tema,
           'nivel': nivel,
+          'duracion_semanas': duracionSemanas,
         }),
       );
 

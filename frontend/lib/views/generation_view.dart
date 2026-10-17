@@ -4,10 +4,14 @@ import '../services/api_service.dart';
 
 class GenerationView extends StatefulWidget {
   final String selectedTopic;
+  final String nivel;
+  final int duracionSemanas;
 
   const GenerationView({
     super.key,
     required this.selectedTopic,
+    this.nivel = 'Intermedio',
+    this.duracionSemanas = 4,
   });
 
   @override
@@ -50,7 +54,11 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
   Future<void> _callGenerateApi() async {
     try {
-      final response = await ApiService.generateCourse(widget.selectedTopic);
+      final response = await ApiService.generateCourse(
+        widget.selectedTopic,
+        nivel: widget.nivel,
+        duracionSemanas: widget.duracionSemanas,
+      );
 
       if (!mounted) return;
 

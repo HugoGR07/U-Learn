@@ -396,51 +396,64 @@ class _CoursesViewState extends State<CoursesView> {
                         );
                       }),
 
-                    const SizedBox(height: 16),
-
-                    // Botón "Agregar nuevo curso" -> Conectado a TopicsView
-                    OutlinedButton(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const TopicsView(),
-                          ),
-                        );
-                        _loadUserAndCourses();
-                      },
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 52),
-                        side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        backgroundColor: Colors.white,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add_rounded, color: Color(0xFF2563EB), size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Agregar nuevo curso',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2563EB),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
                     const SizedBox(height: 20),
                   ],
                 ),
               ),
             ),
           ),
+
+          // 3. Botón "Agregar nuevo curso" fijo en la parte inferior
+          _buildAddCourseBar(),
         ],
+      ),
+    );
+  }
+
+  // Barra inferior fija con el botón para agregar un curso (-> TopicsView)
+  Widget _buildAddCourseBar() {
+    return Container(
+      // Mismo color que el fondo, sin sombra: no se nota división
+      color: const Color(0xFFF8FAFC),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: OutlinedButton(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TopicsView(),
+                ),
+              );
+              _loadUserAndCourses();
+            },
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 52),
+              side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.add_rounded, color: Color(0xFF2563EB), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Agregar nuevo curso',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
