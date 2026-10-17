@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import 'topics_view.dart';
 import 'profile_view.dart'; 
 import 'study_view.dart';
@@ -29,6 +30,7 @@ class _CoursesViewState extends State<CoursesView> {
   @override
   void initState() {
     super.initState();
+    NotificationService.loadInbox();
     _loadUserAndCourses();
   }
 
@@ -68,6 +70,9 @@ class _CoursesViewState extends State<CoursesView> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
+    // Al volver de otra pantalla puede haber notificaciones nuevas
+    NotificationService.loadInbox();
+
     try {
       final coursesData = await ApiService.getUserGuides();
 
@@ -95,93 +100,205 @@ class _CoursesViewState extends State<CoursesView> {
     }
   }
 
-  /// Muestra el modal de notificaciones exactamente como lo tenías originalmente
+  /// Modal con la bandeja de notificaciones locales.
+  /// Al cerrarlo, todas quedan marcadas como leídas.
   void _showNotificationsModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.notifications_active_rounded, color: Color(0xFF2563EB)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Notificaciones',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ValueListenableBuilder<List<AppNotification>>(
+              valueListenable: NotificationService.inbox,
+              builder: (context, items, _) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.notifications_active_rounded, color: Color(0xFF2563EB)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Notificaciones',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (items.isNotEmpty)
+                              TextButton(
+                                onPressed: NotificationService.clearInbox,
+                                child: const Text(
+                                  'Borrar todo',
+                                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                ),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    if (items.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.notifications_off_outlined, size: 40, color: Color(0xFF94A3B8)),
+                              SizedBox(height: 8),
+                              Text(
+                                'No tienes notificaciones',
+                                style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (_, i) {
+                            final n = items[i];
+                            return _buildNotificationTile(
+                              icon: _iconFor(n.title),
+                              title: n.title,
+                              body: n.body,
+                              time: _timeAgo(n.date),
+                              unread: !n.read,
+                            );
+                          },
                         ),
                       ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFDBEAFE),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.auto_awesome, color: Color(0xFF2563EB), size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '¡Bienvenido a U-Learn!',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF0F172A),
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Genera tu primera guía de estudio con IA para comenzar.',
-                            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 16),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                );
+              },
+            ),
           ),
         );
       },
+    ).whenComplete(NotificationService.markAllAsRead);
+  }
+
+  Widget _buildNotificationTile({
+    required IconData icon,
+    required String title,
+    required String body,
+    String? time,
+    required bool unread,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: unread ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: unread ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFDBEAFE),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: const Color(0xFF2563EB), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                    if (unread)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF2563EB),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+                if (time != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    time,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  IconData _iconFor(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('bienvenido')) return Icons.auto_awesome;
+    if (t.contains('examen')) return Icons.quiz_rounded;
+    if (t.contains('sección') || t.contains('seccion')) return Icons.check_circle_rounded;
+    if (t.contains('pendiente') || t.contains('esperan')) return Icons.alarm_rounded;
+    return Icons.notifications_rounded;
+  }
+
+  String _timeAgo(DateTime d) {
+    final diff = DateTime.now().difference(d);
+    if (diff.inMinutes < 1) return 'Justo ahora';
+    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
+    if (diff.inDays == 1) return 'Ayer';
+    if (diff.inDays < 7) return 'Hace ${diff.inDays} días';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
   @override
@@ -409,11 +526,23 @@ class _CoursesViewState extends State<CoursesView> {
                 ),
               ),
               // Botón de Campana -> Despliega la ventana modal de notificaciones
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.notifications_rounded, color: Colors.amber, size: 24),
-                onPressed: () => _showNotificationsModal(context),
+              ValueListenableBuilder<List<AppNotification>>(
+                valueListenable: NotificationService.inbox,
+                builder: (context, items, _) {
+                  final unread = items.where((n) => !n.read).length;
+                  return IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _showNotificationsModal(context),
+                    icon: Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text(unread > 9 ? '9+' : '$unread'),
+                      backgroundColor: const Color(0xFFEF4444),
+                      textColor: Colors.white,
+                      child: const Icon(Icons.notifications_rounded, color: Colors.amber, size: 24),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 12),
               // Foto de perfil -> Navega a la vista de perfil
