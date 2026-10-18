@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import './generation_view.dart';
+import '../widgets/encabezado_azul.dart';
 
 class TopicsView extends StatefulWidget {
   const TopicsView({super.key});
@@ -29,10 +30,10 @@ class _TopicsViewState extends State<TopicsView>
 
   // Etiqueta -> semanas que se envían al backend (duracion_semanas)
   final List<Map<String, dynamic>> durations = const [
-    {'label': '1 semana', 'weeks': 1, 'num': '1', 'unit': 'semana'},
-    {'label': '2 semanas', 'weeks': 2, 'num': '2', 'unit': 'semanas'},
-    {'label': '3 semanas', 'weeks': 3, 'num': '3', 'unit': 'semanas'},
-    {'label': '1 mes', 'weeks': 4, 'num': '1', 'unit': 'mes'},
+    {'label': '1 semana', 'weeks': 1, 'num': '1', 'unit': 'semana', 'secciones': 3, 'temas': 3},
+    {'label': '2 semanas', 'weeks': 2, 'num': '2', 'unit': 'semanas', 'secciones': 6, 'temas': 3},
+    {'label': '3 semanas', 'weeks': 3, 'num': '3', 'unit': 'semanas', 'secciones': 9, 'temas': 3},
+    {'label': '1 mes', 'weeks': 4, 'num': '1', 'unit': 'mes', 'secciones': 12, 'temas': 3},
   ];
 
   // Brillo que recorre el botón y la opción de tiempo elegida (en bucle)
@@ -147,57 +148,47 @@ class _TopicsViewState extends State<TopicsView>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: isFetchingTopics
-                  ? const Center(
-                      child: CircularProgressIndicator(color: _primary))
-                  : _buildBody(),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // 1. Encabezado azul (se desplaza junto con el contenido)
+                  EncabezadoAzul(
+                    title: 'Nuevo curso',
+                    subtitle: 'Crea tu guía de estudio con IA',
+                    grande: true,
+                    leading: EncabezadoAzul.boton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      grande: true,
+                      size: 22,
+                      onTap: () => Navigator.maybePop(context),
+                    ),
+                  ),
+                  isFetchingTopics
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 60),
+                          child: CircularProgressIndicator(color: _primary),
+                        )
+                      : _buildBody(),
+                ],
+              ),
             ),
-            _buildBottomButton(),
-          ],
-        ),
+          ),
+          SafeArea(top: false, child: _buildBottomButton()),
+        ],
       ),
     );
   }
 
   // ───────────────────────── Cuerpo ─────────────────────────
   Widget _buildBody() {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
-
-          // 1. Barra Superior (como la original)
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: _text,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.maybePop(context),
-                ),
-              ),
-              const Text(
-                'Nuevo curso',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _text,
-                ),
-              ),
-            ],
-          ),
-
           const SizedBox(height: 24),
 
           // 2. Sección: ¿Qué deseas aprender?
@@ -232,6 +223,10 @@ class _TopicsViewState extends State<TopicsView>
           const SizedBox(height: 16),
 
           _buildDurationSelector(),
+
+          const SizedBox(height: 32),
+
+          _buildPlanSummary(),
 
           const SizedBox(height: 24),
         ],
@@ -448,6 +443,91 @@ class _TopicsViewState extends State<TopicsView>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPlanSummary() {
+    final plan = durations.firstWhere(
+      (d) => d['weeks'] == selectedWeeks,
+      orElse: () => durations[1],
+    );
+    final int secciones = plan['secciones'] as int;
+    final int temas = plan['temas'] as int;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.08),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      ),
+      child: Container(
+        key: ValueKey(selectedWeeks),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEBF2FE),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tu guía incluirá en total:',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: _primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _planStat(Icons.layers_rounded, '$secciones', 'secciones'),
+                const SizedBox(width: 10),
+                _planStat(Icons.menu_book_rounded, '${secciones * temas}', 'temas'),
+                const SizedBox(width: 10),
+                _planStat(Icons.quiz_rounded, '$secciones', 'exámenes'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _planStat(IconData icon, String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: _primary),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: _text,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: _muted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

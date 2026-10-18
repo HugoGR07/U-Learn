@@ -1,8 +1,367 @@
 const db = require('../config/db');
-const { GoogleGenAI, Type } = require('@google/genai');
+const { GoogleGenAI, Type, ThinkingLevel } = require('@google/genai');
 
 // Inicializar cliente de Google Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY });
+
+const MODELOS = [
+  'models/gemini-3.5-flash',
+  'models/gemini-3.6-flash',
+  'models/gemini-3.7-flash'
+];
+
+const SECCIONES_POR_SEMANA = 3;
+const TEMAS_POR_SECCION = 3;
+const CONCEPTOS_POR_TEMA = 3;
+const PREGUNTAS_POR_EXAMEN = 10;
+const MINUTOS_POR_EXAMEN = 15;
+const INCISOS = ['A', 'B', 'C', 'D'];
+const INTENTOS_POR_SECCION = 2;
+const TIMEOUT_MODELO_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '120000', 10);
+const CONCURRENCIA = parseInt(process.env.GEMINI_CONCURRENCIA || '12', 10);
+
+const obtenerPlan = (semanas) => {
+  const n = Math.min(Math.max(parseInt(semanas, 10) || 1, 1), 4);
+  return {
+    semanas: n,
+    secciones: n * SECCIONES_POR_SEMANA,
+    temas: TEMAS_POR_SECCION,
+    conceptos: CONCEPTOS_POR_TEMA,
+  };
+};
+
+const mapConcurrente = async (items, limite, fn) => {
+  const resultados = new Array(items.length);
+  let siguiente = 0;
+  const trabajador = async () => {
+    while (siguiente < items.length) {
+      const i = siguiente++;
+      resultados[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, trabajador));
+  return resultados;
+};
+
+const estructuraSchema = {
+  type: Type.OBJECT,
+  properties: {
+    secciones: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          titulo_seccion: { type: Type.STRING },
+          objetivo: { type: Type.STRING },
+          temas: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ['titulo_seccion', 'objetivo', 'temas'],
+      },
+    },
+  },
+  required: ['secciones'],
+};
+
+const seccionSchema = {
+  type: Type.OBJECT,
+  properties: {
+    temas: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          titulo: { type: Type.STRING },
+          introduccion: { type: Type.STRING },
+          conceptos: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                titulo: { type: Type.STRING },
+                explicacion: { type: Type.STRING },
+              },
+              required: ['titulo', 'explicacion'],
+            },
+          },
+          ejemplo: { type: Type.STRING },
+          consejo: { type: Type.STRING },
+          resumen: { type: Type.STRING },
+        },
+        required: ['titulo', 'introduccion', 'conceptos', 'ejemplo', 'consejo', 'resumen'],
+      },
+    },
+    preguntas: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          pregunta: { type: Type.STRING },
+          opciones: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                inciso: { type: Type.STRING, enum: INCISOS },
+                texto: { type: Type.STRING },
+              },
+              required: ['inciso', 'texto'],
+            },
+          },
+          respuesta_correcta: { type: Type.STRING, enum: INCISOS },
+        },
+        required: ['pregunta', 'opciones', 'respuesta_correcta'],
+      },
+    },
+  },
+  required: ['temas', 'preguntas'],
+};
+
+const llamarModelo = (modelName, prompt, schema, conThinking) =>
+  ai.models.generateContent({
+    model: modelName,
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+      abortSignal: AbortSignal.timeout(TIMEOUT_MODELO_MS),
+      ...(conThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
+    },
+  });
+
+const generarJSON = async (prompt, schema) => {
+  let lastError = null;
+  for (const modelName of MODELOS) {
+    for (const conThinking of [true, false]) {
+      try {
+        const inicio = Date.now();
+        const response = await llamarModelo(modelName, prompt, schema, conThinking);
+        if (response && response.text) {
+          console.log(`${modelName} respondió en ${Date.now() - inicio} ms`);
+          return JSON.parse(response.text);
+        }
+        break;
+      } catch (err) {
+        lastError = err;
+        const invalido = err.status === 400 || /thinking/i.test(err.message || '');
+        console.warn(`Falló el modelo ${modelName} (${err.status || err.name || err.message}). Probando el siguiente...`);
+        if (!(conThinking && invalido)) break;
+      }
+    }
+  }
+  throw lastError || new Error('No se pudo conectar con ningún modelo de Gemini.');
+};
+
+const limpiarTexto = (valor) => (typeof valor === 'string' ? valor.trim() : '');
+
+const normalizarPregunta = (preg) => {
+  const enunciado = limpiarTexto(preg && preg.pregunta);
+  const opcionesRaw = Array.isArray(preg && preg.opciones) ? preg.opciones : [];
+  const opciones = opcionesRaw
+    .map((op) => limpiarTexto(op && (op.texto || op.opcion)))
+    .filter(Boolean)
+    .slice(0, INCISOS.length)
+    .map((texto, i) => ({ inciso: INCISOS[i], texto }));
+
+  if (!enunciado || opciones.length !== INCISOS.length) return null;
+
+  let correcta = limpiarTexto(preg.respuesta_correcta).toUpperCase();
+  if (!INCISOS.includes(correcta)) {
+    const original = opcionesRaw.findIndex(
+      (op) => limpiarTexto(op && op.texto).toLowerCase() === limpiarTexto(preg.respuesta_correcta).toLowerCase()
+    );
+    correcta = original >= 0 && original < INCISOS.length ? INCISOS[original] : '';
+  } else {
+    const idx = opcionesRaw.findIndex((op) => limpiarTexto(op && op.inciso).toUpperCase() === correcta);
+    if (idx >= 0 && idx < INCISOS.length) correcta = INCISOS[idx];
+  }
+
+  if (!correcta) return null;
+  return { pregunta: enunciado, opciones, respuesta_correcta: correcta };
+};
+
+const normalizarTema = (tema, plan) => {
+  const titulo = limpiarTexto(tema && tema.titulo);
+  const introduccion = limpiarTexto(tema && tema.introduccion);
+  if (!titulo || !introduccion) return null;
+
+  const conceptos = (Array.isArray(tema.conceptos) ? tema.conceptos : [])
+    .map((c) => ({ titulo: limpiarTexto(c && c.titulo), explicacion: limpiarTexto(c && c.explicacion) }))
+    .filter((c) => c.titulo && c.explicacion)
+    .slice(0, plan.conceptos);
+
+  return {
+    titulo,
+    contenido: {
+      version: 2,
+      introduccion,
+      conceptos,
+      ejemplo: limpiarTexto(tema.ejemplo),
+      consejo: limpiarTexto(tema.consejo),
+      resumen: limpiarTexto(tema.resumen),
+    },
+  };
+};
+
+const generarEstructura = async (tema, nivel, plan) => {
+  const prompt = `Eres un experto educador en finanzas personales y diseñador instruccional.
+Diseña el temario de un curso sobre "${tema}" para nivel "${nivel}", con duración de ${plan.semanas} semana(s) (${SECCIONES_POR_SEMANA} secciones por semana).
+
+Reglas OBLIGATORIAS:
+1. Exactamente ${plan.secciones} secciones progresivas (de lo básico a lo avanzado), sin repetir contenido entre ellas.
+2. Cada sección tiene exactamente ${plan.temas} temas con títulos cortos y específicos (máximo 8 palabras).
+3. "objetivo" es una sola oración que dice qué podrá hacer el estudiante al terminar la sección.
+4. Todo en español neutro.`;
+
+  for (let intento = 1; intento <= INTENTOS_POR_SECCION; intento++) {
+    const data = await generarJSON(prompt, estructuraSchema);
+    const secciones = (Array.isArray(data && data.secciones) ? data.secciones : [])
+      .map((s) => ({
+        titulo: limpiarTexto(s && s.titulo_seccion),
+        objetivo: limpiarTexto(s && s.objetivo),
+        temas: (Array.isArray(s && s.temas) ? s.temas : []).map(limpiarTexto).filter(Boolean).slice(0, plan.temas),
+      }))
+      .filter((s) => s.titulo && s.temas.length === plan.temas)
+      .slice(0, plan.secciones);
+
+    if (secciones.length === plan.secciones) return secciones;
+    console.warn(`Estructura incompleta (intento ${intento}): ${secciones.length}/${plan.secciones} secciones válidas`);
+  }
+  throw new Error('Gemini no devolvió una estructura de curso válida.');
+};
+
+const generarSeccion = async (tema, nivel, plan, seccion, indice, todas) => {
+  const temario = todas.map((s, i) => `${i + 1}. ${s.titulo}`).join('\n');
+  const prompt = `Eres un experto educador en finanzas personales y diseñador instruccional.
+Curso: "${tema}" | Nivel: "${nivel}" | Duración: ${plan.semanas} semana(s).
+
+Temario completo del curso (solo como contexto, no repitas otras secciones):
+${temario}
+
+Desarrolla ÚNICAMENTE la sección ${indice + 1}: "${seccion.titulo}".
+Objetivo de la sección: ${seccion.objetivo}
+
+Temas a desarrollar, en este orden exacto:
+${seccion.temas.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+Reglas OBLIGATORIAS para "temas" (exactamente ${plan.temas}, uno por cada tema listado y con el mismo título):
+- "introduccion": un párrafo de 2 a 4 oraciones que explique de qué trata el tema y por qué importa.
+- "conceptos": exactamente ${plan.conceptos} conceptos clave; cada uno con un "titulo" corto y una "explicacion" de 1 a 2 oraciones.
+- "ejemplo": un caso práctico concreto con cifras en pesos mexicanos (MXN), de 2 a 3 oraciones.
+- "consejo": una recomendación accionable de una oración.
+- "resumen": una oración que sintetice lo más importante.
+- Lenguaje claro y directo. Texto plano, sin Markdown, sin asteriscos ni viñetas.
+
+Reglas OBLIGATORIAS para "preguntas" (examen de esta sección):
+- Exactamente ${PREGUNTAS_POR_EXAMEN} preguntas de opción múltiple que evalúen SOLO los temas de esta sección.
+- Cada pregunta con exactamente 4 opciones con incisos "A", "B", "C" y "D", en ese orden.
+- "respuesta_correcta" es SOLO la letra del inciso correcto ("A", "B", "C" o "D").
+- Solo una opción correcta por pregunta; distractores plausibles; reparte la respuesta correcta entre los cuatro incisos.
+- Enunciados y opciones breves. Mezcla preguntas de comprensión, aplicación con cifras y análisis de casos.`;
+
+  for (let intento = 1; intento <= INTENTOS_POR_SECCION; intento++) {
+    try {
+      const data = await generarJSON(prompt, seccionSchema);
+      const temas = (Array.isArray(data && data.temas) ? data.temas : [])
+        .map((t) => normalizarTema(t, plan))
+        .filter(Boolean)
+        .slice(0, plan.temas);
+      const preguntas = (Array.isArray(data && data.preguntas) ? data.preguntas : [])
+        .map(normalizarPregunta)
+        .filter(Boolean)
+        .slice(0, PREGUNTAS_POR_EXAMEN);
+
+      if (temas.length === plan.temas && preguntas.length === PREGUNTAS_POR_EXAMEN) {
+        return { ...seccion, temas, preguntas };
+      }
+      console.warn(
+        `Sección ${indice + 1} incompleta (intento ${intento}): ${temas.length}/${plan.temas} temas, ${preguntas.length}/${PREGUNTAS_POR_EXAMEN} preguntas`
+      );
+    } catch (err) {
+      console.warn(`Error generando la sección ${indice + 1} (intento ${intento}): ${err.message}`);
+    }
+  }
+  throw new Error(`No se pudo generar la sección ${indice + 1} con ${PREGUNTAS_POR_EXAMEN} preguntas.`);
+};
+
+const guardarCurso = async (id_usuario, idTema, secciones) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const guideResult = await client.query(
+      `INSERT INTO guia_estudio (id_usuario, id_tema, fecha_creacion)
+       VALUES ($1, $2, NOW())
+       RETURNING id_guia`,
+      [id_usuario, idTema]
+    );
+    const idGuia = guideResult.rows[0].id_guia;
+
+    const secResult = await client.query(
+      `INSERT INTO seccion (id_guia, titulo, orden_seccion)
+       SELECT $1, t.titulo, t.orden
+       FROM unnest($2::text[], $3::int[]) AS t(titulo, orden)
+       RETURNING id_seccion, orden_seccion`,
+      [idGuia, secciones.map((s) => s.titulo.slice(0, 150)), secciones.map((_, i) => i + 1)]
+    );
+    const idPorOrden = new Map(secResult.rows.map((r) => [r.orden_seccion, r.id_seccion]));
+    const idsSeccion = secciones.map((_, i) => idPorOrden.get(i + 1));
+
+    await client.query(
+      `INSERT INTO avance_seccion (id_seccion, id_usuario, completado)
+       SELECT unnest($1::int[]), $2, FALSE
+       ON CONFLICT (id_usuario, id_seccion) DO NOTHING`,
+      [idsSeccion, id_usuario]
+    );
+
+    const cont = { ids: [], titulos: [], contenidos: [], ordenes: [] };
+    secciones.forEach((sec, i) => {
+      sec.temas.forEach((t, j) => {
+        cont.ids.push(idsSeccion[i]);
+        cont.titulos.push(t.titulo.slice(0, 150));
+        cont.contenidos.push(JSON.stringify(t.contenido));
+        cont.ordenes.push(j + 1);
+      });
+    });
+    await client.query(
+      `INSERT INTO contenido_seccion (id_seccion, titulo, contenido, orden_contenido)
+       SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::int[])`,
+      [cont.ids, cont.titulos, cont.contenidos, cont.ordenes]
+    );
+
+    const examResult = await client.query(
+      `INSERT INTO examen (id_seccion, tiempo_duracion_minutos)
+       SELECT unnest($1::int[]), $2
+       RETURNING id_examen, id_seccion`,
+      [idsSeccion, MINUTOS_POR_EXAMEN]
+    );
+    const examenPorSeccion = new Map(examResult.rows.map((r) => [r.id_seccion, r.id_examen]));
+
+    const preg = { ids: [], textos: [], opciones: [], correctas: [] };
+    secciones.forEach((sec, i) => {
+      const idExamen = examenPorSeccion.get(idsSeccion[i]);
+      sec.preguntas.forEach((p) => {
+        preg.ids.push(idExamen);
+        preg.textos.push(p.pregunta);
+        preg.opciones.push(JSON.stringify(p.opciones));
+        preg.correctas.push(p.respuesta_correcta);
+      });
+    });
+    await client.query(
+      `INSERT INTO pregunta (id_examen, pregunta, opciones, respuesta_correcta)
+       SELECT t.id_examen, t.pregunta, t.opciones::jsonb, t.correcta
+       FROM unnest($1::int[], $2::text[], $3::text[], $4::text[]) AS t(id_examen, pregunta, opciones, correcta)`,
+      [preg.ids, preg.textos, preg.opciones, preg.correctas]
+    );
+
+    await client.query('COMMIT');
+    return idGuia;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
 
 // 1. GENERAR CURSO/GUÍA CON GOOGLE GEMINI Y GUARDAR EN POSTGRESQL
 exports.generateCourse = async (req, res) => {
@@ -31,181 +390,35 @@ exports.generateCourse = async (req, res) => {
       idTema = newTema.rows[0].id_tema;
     }
 
-    // B. Definir el Esquema JSON estricto para Gemini
-    const cursoSchema = {
-      type: Type.OBJECT,
-      properties: {
-        secciones: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              titulo_seccion: { type: Type.STRING },
-              orden_seccion: { type: Type.INTEGER },
-              contenidos: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    titulo_contenido: { type: Type.STRING },
-                    contenido: { type: Type.STRING },
-                    orden_contenido: { type: Type.INTEGER },
-                  },
-                  required: ['titulo_contenido', 'contenido', 'orden_contenido'],
-                },
-              },
-              examen: {
-                type: Type.OBJECT,
-                properties: {
-                  tiempo_duracion_minutos: { type: Type.INTEGER },
-                  preguntas: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        pregunta: { type: Type.STRING },
-                        opciones: {
-                          type: Type.ARRAY,
-                          items: {
-                            type: Type.OBJECT,
-                            properties: {
-                              inciso: { type: Type.STRING },
-                              texto: { type: Type.STRING },
-                            },
-                            required: ['inciso', 'texto'],
-                          },
-                        },
-                        respuesta_correcta: { type: Type.STRING },
-                      },
-                      required: ['pregunta', 'opciones', 'respuesta_correcta'],
-                    },
-                  },
-                },
-                required: ['tiempo_duracion_minutos', 'preguntas'],
-              },
-            },
-            required: ['titulo_seccion', 'orden_seccion', 'contenidos', 'examen'],
-          },
-        },
-      },
-      required: ['secciones'],
-    };
+    const nivelCurso = nivel || 'Intermedio';
+    const plan = obtenerPlan(duracion_semanas);
 
-    // C. Definición del Prompt Optimizado
-    const semanas = duracion_semanas || 4;
-    const promptText = `Eres un experto educador y diseñador instruccional.
-Genera un curso/guía de estudio estructurado y detallado sobre el tema: "${tema}" para un nivel de dificultad: "${nivel || 'Intermedio'}".
-El curso está programado para una duración estimada de ${semanas} semanas.
+    const inicio = Date.now();
+    const estructura = await generarEstructura(tema, nivelCurso, plan);
 
-Requisitos OBLIGATORIOS de la guía:
-1. Genera entre 4 y 6 secciones/módulos completos y progresivos para cubrir el tema en profundidad.
-2. Cada sección DEBE incluir de 2 a 3 temas o contenidos instructivos bien explicados y educativos.
-3. CADA SECCIÓN DEBE TENER SU PROPIO EXAMEN EVALUATIVO OBLIGATORIO al final.
-4. Cada examen debe contener exactamente 10 preguntas de opción múltiple (con incisos A, B, C, D) e indicar claramente la "respuesta_correcta" (ejemplo: "A" o el texto exacto de la respuesta).`;
-
-    // Lista de modelos oficial para @google/genai
-    const modelsToTry = [
-      'models/gemini-3.5-flash',
-      'models/gemini-3.6-flash',
-      'models/gemini-3.7-flash'
-    ];
-
-    let response = null;
-    let lastError = null;
-
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`Intentando generar curso con modelo: ${modelName}...`);
-        response = await ai.models.generateContent({
-          model: modelName,
-          contents: promptText,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: cursoSchema,
-          },
-        });
-
-        if (response && response.text) {
-          console.log(`¡Éxito generando con el modelo ${modelName}!`);
-          break;
-        }
-      } catch (err) {
-        console.warn(`Falló el modelo ${modelName} (${err.status || err.message}). Probando el siguiente...`);
-        lastError = err;
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error('No se pudo conectar con ningún modelo de Gemini.');
-    }
-
-    const courseData = JSON.parse(response.text);
-
-    // D. Insertar en PostgreSQL
-    const guideResult = await db.query(
-      `INSERT INTO guia_estudio (id_usuario, id_tema, fecha_creacion)
-       VALUES ($1, $2, NOW())
-       RETURNING id_guia`,
-      [id_usuario, idTema]
+    const secciones = await mapConcurrente(estructura, CONCURRENCIA, (sec, i) =>
+      generarSeccion(tema, nivelCurso, plan, sec, i, estructura)
     );
-    const idGuia = guideResult.rows[0].id_guia;
 
-    for (const sec of courseData.secciones) {
-      // Insertar Sección
-      const secResult = await db.query(
-        `INSERT INTO seccion (id_guia, titulo, orden_seccion)
-         VALUES ($1, $2, $3)
-         RETURNING id_seccion`,
-        [idGuia, sec.titulo_seccion, sec.orden_seccion]
-      );
-      const idSeccion = secResult.rows[0].id_seccion;
-
-      // Registrar avance inicial
-      await db.query(
-        `INSERT INTO avance_seccion (id_seccion, id_usuario, completado)
-         VALUES ($1, $2, FALSE)
-         ON CONFLICT (id_usuario, id_seccion) DO NOTHING`,
-        [idSeccion, id_usuario]
-      );
-
-      // Insertar Contenidos
-      for (const cont of sec.contenidos) {
-        await db.query(
-          `INSERT INTO contenido_seccion (id_seccion, titulo, contenido, orden_contenido)
-           VALUES ($1, $2, $3, $4)`,
-          [idSeccion, cont.titulo_contenido, cont.contenido, cont.orden_contenido]
-        );
-      }
-
-      // Insertar Examen
-      if (sec.examen && sec.examen.preguntas && sec.examen.preguntas.length > 0) {
-        const examResult = await db.query(
-          `INSERT INTO examen (id_seccion, tiempo_duracion_minutos)
-           VALUES ($1, $2)
-           RETURNING id_examen`,
-          [idSeccion, sec.examen.tiempo_duracion_minutos || 15]
-        );
-        const idExamen = examResult.rows[0].id_examen;
-
-        for (const preg of sec.examen.preguntas) {
-          await db.query(
-            `INSERT INTO pregunta (id_examen, pregunta, opciones, respuesta_correcta)
-             VALUES ($1, $2, $3, $4)`,
-            [
-              idExamen, 
-              preg.pregunta, 
-              typeof preg.opciones === 'string' ? preg.opciones : JSON.stringify(preg.opciones), 
-              preg.respuesta_correcta
-            ]
-          );
-        }
-      }
-    }
+    const idGuia = await guardarCurso(id_usuario, idTema, secciones);
+    console.log(`Guía ${idGuia} generada en ${Date.now() - inicio} ms (${secciones.length} secciones)`);
 
     res.status(201).json({
       message: 'Guía de estudio generada e insertada correctamente',
       id_guia: idGuia,
-      curso: courseData,
+      curso: {
+        semanas: plan.semanas,
+        total_secciones: secciones.length,
+        temas_por_seccion: plan.temas,
+        preguntas_por_examen: PREGUNTAS_POR_EXAMEN,
+        secciones: secciones.map((s, i) => ({
+          orden_seccion: i + 1,
+          titulo_seccion: s.titulo,
+          objetivo: s.objetivo,
+          temas: s.temas.map((t) => t.titulo),
+          total_preguntas: s.preguntas.length,
+        })),
+      },
     });
   } catch (error) {
     console.error('Error al generar el curso con Gemini:', error);
@@ -302,46 +515,57 @@ exports.getGuideDetails = async (req, res) => {
     const secciones = sectionsQuery.rows;
 
     // C. Consultar contenidos y exámenes para cada sección
-    for (let sec of secciones) {
-      const contentQuery = await db.query(
-        `SELECT id_contenido, titulo, contenido, orden_contenido
+    const idsSeccion = secciones.map((sec) => sec.id_seccion);
+
+    const [contentQuery, examQuery, questionsQuery] = await Promise.all([
+      db.query(
+        `SELECT id_contenido, id_seccion, titulo, contenido, orden_contenido
          FROM contenido_seccion
-         WHERE id_seccion = $1
-         ORDER BY orden_contenido ASC`,
-        [sec.id_seccion]
-      );
-      sec.contenidos = contentQuery.rows;
-
-      const examQuery = await db.query(
-        `SELECT id_examen, tiempo_duracion_minutos
+         WHERE id_seccion = ANY($1::int[])
+         ORDER BY id_seccion, orden_contenido ASC`,
+        [idsSeccion]
+      ),
+      db.query(
+        `SELECT DISTINCT ON (id_seccion) id_examen, id_seccion, tiempo_duracion_minutos
          FROM examen
-         WHERE id_seccion = $1`,
-        [sec.id_seccion]
-      );
+         WHERE id_seccion = ANY($1::int[])
+         ORDER BY id_seccion, id_examen ASC`,
+        [idsSeccion]
+      ),
+      db.query(
+        `SELECT p.id_pregunta, p.id_examen, p.pregunta, p.opciones, p.respuesta_correcta
+         FROM pregunta p
+         JOIN examen e ON e.id_examen = p.id_examen
+         WHERE e.id_seccion = ANY($1::int[])
+         ORDER BY p.id_pregunta ASC`,
+        [idsSeccion]
+      ),
+    ]);
 
-      if (examQuery.rows.length > 0) {
-        const id_examen = examQuery.rows[0].id_examen;
-        const questionsQuery = await db.query(
-          `SELECT id_pregunta, pregunta, opciones, respuesta_correcta
-           FROM pregunta
-           WHERE id_examen = $1`,
-          [id_examen]
-        );
+    const preguntasPorExamen = new Map();
+    for (const { id_examen, ...q } of questionsQuery.rows) {
+      // Asegurar parsing JSON de opciones si retornó como String
+      const pregunta = {
+        ...q,
+        opciones: typeof q.opciones === 'string' ? JSON.parse(q.opciones) : q.opciones,
+      };
+      if (!preguntasPorExamen.has(id_examen)) preguntasPorExamen.set(id_examen, []);
+      preguntasPorExamen.get(id_examen).push(pregunta);
+    }
 
-        // Asegurar parsing JSON de opciones si retornó como String
-        const preguntasFormateadas = questionsQuery.rows.map((q) => ({
-          ...q,
-          opciones: typeof q.opciones === 'string' ? JSON.parse(q.opciones) : q.opciones,
-        }));
+    for (const sec of secciones) {
+      sec.contenidos = contentQuery.rows
+        .filter((c) => c.id_seccion === sec.id_seccion)
+        .map(({ id_seccion, ...c }) => c);
 
-        sec.examen = {
-          id_examen,
-          tiempo_duracion_minutos: examQuery.rows[0].tiempo_duracion_minutos,
-          preguntas: preguntasFormateadas,
-        };
-      } else {
-        sec.examen = null;
-      }
+      const examen = examQuery.rows.find((e) => e.id_seccion === sec.id_seccion);
+      sec.examen = examen
+        ? {
+            id_examen: examen.id_examen,
+            tiempo_duracion_minutos: examen.tiempo_duracion_minutos,
+            preguntas: preguntasPorExamen.get(examen.id_examen) || [],
+          }
+        : null;
     }
 
     res.json({

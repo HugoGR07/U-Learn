@@ -4,6 +4,7 @@ import 'login_view.dart';
 import 'home_view.dart';
 import '../services/notification_service.dart';
 import '../widgets/foto_perfil.dart';
+import '../widgets/encabezado_azul.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -16,6 +17,7 @@ class _ProfileViewState extends State<ProfileView> {
   bool _emailNotifications = true;
   bool _pushNotifications = true;
   bool _reminderNotifications = false;
+
 
   @override
   void initState() {
@@ -849,33 +851,99 @@ class _ProfileViewState extends State<ProfileView> {
   void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('¿Cerrar sesión?', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancelar', style: TextStyle(color: Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // Evita que un doble toque dispare el cierre de sesión dos veces
-                if (_cerrandoSesion) return;
-                _cerrandoSesion = true;
-                Navigator.pop(dialogContext);
-                _cerrarSesion();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 34,
+                ),
               ),
-              child: const Text('Cerrar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+              const SizedBox(height: 16),
+              const Text(
+                '¿Cerrar sesión?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Evita que un doble toque dispare el cierre de sesión dos veces
+                    if (_cerrandoSesion) return;
+                    _cerrandoSesion = true;
+                    Navigator.pop(dialogContext);
+                    _cerrarSesion();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Cerrar sesión',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancelar',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -892,46 +960,15 @@ class _ProfileViewState extends State<ProfileView> {
               alignment: Alignment.bottomCenter,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 55),
-                  child: Container(
-                    height: 150, // Altura reducida para recortar el espacio superior
-                    width: double.infinity,
-                    alignment: Alignment.topCenter,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1D61E7),
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(24),
-                        bottomRight: Radius.circular(24),
-                      ),
-                    ),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              onPressed: () => Navigator.maybePop(context),
-                            ),
-                            const Expanded(
-                              child: Text(
-                                'Mi perfil',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 48), // Balance con botón atrás
-                          ],
-                        ),
-                      ),
+                  padding: const EdgeInsets.only(bottom: 82),
+                  child: EncabezadoAzul(
+                    title: 'Mi perfil',
+                    grande: true,
+                    leading: EncabezadoAzul.boton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      grande: true,
+                      size: 22,
+                      onTap: () => Navigator.maybePop(context),
                     ),
                   ),
                 ),
@@ -954,9 +991,9 @@ class _ProfileViewState extends State<ProfileView> {
                             border: Border.all(color: Colors.white, width: 3.5),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.06),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                                color: const Color(0xFF1D61E7).withValues(alpha: 0.25),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),

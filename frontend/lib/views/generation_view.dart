@@ -42,8 +42,10 @@ class _GenerationgGuideViewState extends State<GenerationView> {
       if (!mounted) return;
 
       setState(() {
-        if (_progress < 0.90) {
-          _progress += 0.03; // Avanza fluidamente hasta el 90%
+        if (_progress < 0.60) {
+          _progress += 0.012;
+        } else if (_progress < 0.97) {
+          _progress += (0.97 - _progress) * 0.012;
         }
       });
     });
@@ -95,6 +97,13 @@ class _GenerationgGuideViewState extends State<GenerationView> {
         backgroundColor: Colors.red,
       ),
     );
+  }
+
+  int get _seccionesEstimadas {
+    final semanas = widget.duracionSemanas < 1
+        ? 1
+        : (widget.duracionSemanas > 4 ? 4 : widget.duracionSemanas);
+    return semanas * 3;
   }
 
   @override
@@ -168,7 +177,7 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
                 // Subtítulo
                 Text(
-                  'La IA está creando un plan de estudio\nespecial sobre "${widget.selectedTopic}".',
+                  'La IA está generando un plan de estudio sobre "${widget.selectedTopic}".',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 14,
