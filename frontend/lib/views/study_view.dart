@@ -197,7 +197,16 @@ class _StudyViewState extends State<StudyView>
     if (result == 'examen' && examen != null) {
       await _fetchCourseDetails();
       if (!mounted) return;
-      await _openExam(sec, sectionIndex, examen);
+      final fresh = _secciones.firstWhere(
+        (s) => s['id_seccion'] == sec['id_seccion'],
+        orElse: () => sec,
+      ) as Map<String, dynamic>;
+      final freshExam = (fresh['examen'] as Map<String, dynamic>?) ?? examen;
+      if (freshExam['intentos'] is Map) {
+        _showRetakeDialog(fresh, sectionIndex, freshExam);
+        return;
+      }
+      await _openExam(fresh, sectionIndex, freshExam);
     } else if (result != null) {
       _fetchCourseDetails();
     }
@@ -216,6 +225,105 @@ class _StudyViewState extends State<StudyView>
     );
 
     if (mounted) _fetchCourseDetails();
+  }
+
+  static const int _notaAprobatoria = 60;
+
+  int _pct(dynamic v) => (num.tryParse(v?.toString() ?? '') ?? 0).round();
+
+  void _showRetakeDialog(Map<String, dynamic> sec, int sectionIndex, Map<String, dynamic> examen) {
+    final intentos = Map<String, dynamic>.from(examen['intentos'] as Map);
+    final int ultima = _pct(intentos['ultima_calificacion']);
+    final int mejor = _pct(intentos['mejor_calificacion']);
+    final int total = int.tryParse(intentos['total_intentos']?.toString() ?? '') ?? 1;
+    final bool aprobado = ultima >= _notaAprobatoria;
+    final Color color = aprobado ? _success : const Color(0xFFF59E0B);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                aprobado ? Icons.emoji_events_rounded : Icons.stars_rounded,
+                color: aprobado ? const Color(0xFFEAB308) : const Color(0xFF94A3B8),
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Ya presentaste este examen',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _text),
+              ),
+              const SizedBox(height: 16),
+              const Text('Tu última calificación', style: TextStyle(fontSize: 13, color: _muted)),
+              const SizedBox(height: 4),
+              Text(
+                '$ultima%',
+                style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                total > 1
+                    ? 'Mejor calificación: $mejor% · $total intentos'
+                    : '1 intento realizado',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: _muted),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '¿Quieres volver a hacer el examen?',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: _text, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: _border),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'No',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _muted),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        _openExam(sec, sectionIndex, examen);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _exam,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'Sí, repetir',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showLockedDialog() {
@@ -253,7 +361,7 @@ class _StudyViewState extends State<StudyView>
               // Mensaje exacto
               const Text(
                 'Debes completar todas las lecciones de esta sección para desbloquear el examen.',
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.justify,
                 style: TextStyle(
                   fontSize: 14,
                   color: _muted,
@@ -404,6 +512,7 @@ class _StudyViewState extends State<StudyView>
                                         const SizedBox(height: 6),
                                         Text(
                                           description,
+                                          textAlign: TextAlign.justify,
                                           style: const TextStyle(
                                             fontSize: 13,
                                             color: Color(0xFF334155),
@@ -600,6 +709,10 @@ class _StudyViewState extends State<StudyView>
                                   _showLockedDialog();
                                   return;
                                 }
+                                if (examen['intentos'] is Map) {
+                                  _showRetakeDialog(sec, sectionIndex, examen);
+                                  return;
+                                }
                                 _openExam(sec, sectionIndex, examen);
                               },
                             ),
@@ -760,6 +873,10 @@ class _StudyViewState extends State<StudyView>
     required VoidCallback onTap,
   }) {
     final int totalPreguntas = (examen['preguntas'] as List?)?.length ?? 0;
+    final intentos = examen['intentos'] is Map ? examen['intentos'] as Map : null;
+    final int? ultima = intentos != null ? _pct(intentos['ultima_calificacion']) : null;
+    final Color scoreColor =
+        (ultima ?? 0) >= _notaAprobatoria ? _success : const Color(0xFFF59E0B);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -812,9 +929,11 @@ class _StudyViewState extends State<StudyView>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          isUnlocked
-                              ? '$totalPreguntas preguntas'
-                              : 'Completa los temas para desbloquear',
+                          !isUnlocked
+                              ? 'Completa los temas para desbloquear'
+                              : ultima != null
+                                  ? 'Presentado · toca para ver o repetir'
+                                  : '$totalPreguntas preguntas',
                           style: TextStyle(
                             fontSize: 12,
                             color: isUnlocked ? const Color(0xFF4338CA) : const Color(0xFF94A3B8),
@@ -823,6 +942,23 @@ class _StudyViewState extends State<StudyView>
                       ],
                     ),
                   ),
+                  if (isUnlocked && ultima != null)
+                    Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: scoreColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$ultima%',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: scoreColor,
+                        ),
+                      ),
+                    ),
                   Icon(
                     Icons.chevron_right_rounded,
                     color: isUnlocked ? _exam : const Color(0xFF94A3B8),

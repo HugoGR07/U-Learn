@@ -367,6 +367,7 @@ class _ExamViewState extends State<ExamView> {
                           // 3. Enunciado Dinámico
                           Text(
                             enunciado,
+                            textAlign: TextAlign.justify,
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -460,6 +461,7 @@ class _ExamViewState extends State<ExamView> {
                                         Expanded(
                                           child: Text(
                                             optionText,
+                                            textAlign: TextAlign.justify,
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w600,

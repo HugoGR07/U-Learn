@@ -436,6 +436,42 @@ class ApiService {
     }
   }
 
+  /// Tutor IA con respuesta estructurada.
+  /// Devuelve {'fundamentos': Map? , 'respuesta': String}.
+  static Future<Map<String, dynamic>> askAiTutorDetallado({
+    required List<Map<String, dynamic>> examenCompleto,
+    required List<Map<String, dynamic>> errores,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/exam/tutor-ia'),
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'prompt': 'Fundamento teórico de los errores del examen',
+            'examen_completo': examenCompleto,
+            'errores': errores,
+          }),
+        )
+        .timeout(const Duration(seconds: 90));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'fundamentos': data['fundamentos'] is Map
+            ? Map<String, dynamic>.from(data['fundamentos'])
+            : null,
+        'respuesta': data['respuesta']?.toString() ?? '',
+      };
+    }
+    if (response.statusCode == 429) {
+      throw Exception('Llegaste al límite de consultas al tutor. Intenta en una hora.');
+    }
+    throw Exception('Error del servidor: ${response.statusCode}');
+  }
+
   // RECUPERACIÓN DE CONTRASEÑA (rutas públicas, sin token)
   static Future<Map<String, dynamic>> _postPublico(String ruta, Map<String, dynamic> body) async {
     try {

@@ -517,7 +517,7 @@ exports.getGuideDetails = async (req, res) => {
     // C. Consultar contenidos y exámenes para cada sección
     const idsSeccion = secciones.map((sec) => sec.id_seccion);
 
-    const [contentQuery, examQuery, questionsQuery] = await Promise.all([
+    const [contentQuery, examQuery, questionsQuery, attemptsQuery] = await Promise.all([
       db.query(
         `SELECT id_contenido, id_seccion, titulo, contenido, orden_contenido
          FROM contenido_seccion
@@ -540,7 +540,31 @@ exports.getGuideDetails = async (req, res) => {
          ORDER BY p.id_pregunta ASC`,
         [idsSeccion]
       ),
+      db.query(
+        `SELECT i.id_examen,
+                COUNT(*)::int AS total_intentos,
+                MAX(i.calificacion) AS mejor_calificacion,
+                (ARRAY_AGG(i.calificacion ORDER BY i.numero_intento DESC))[1] AS ultima_calificacion,
+                MAX(i.fecha_realizacion) AS fecha_ultimo_intento
+         FROM intento_examen i
+         JOIN examen e ON e.id_examen = i.id_examen
+         WHERE e.id_seccion = ANY($1::int[]) AND i.id_usuario = $2
+         GROUP BY i.id_examen`,
+        [idsSeccion, id_usuario]
+      ),
     ]);
+
+    const intentosPorExamen = new Map(
+      attemptsQuery.rows.map((r) => [
+        r.id_examen,
+        {
+          total_intentos: r.total_intentos,
+          mejor_calificacion: Number(r.mejor_calificacion),
+          ultima_calificacion: Number(r.ultima_calificacion),
+          fecha_ultimo_intento: r.fecha_ultimo_intento,
+        },
+      ])
+    );
 
     const preguntasPorExamen = new Map();
     for (const { id_examen, ...q } of questionsQuery.rows) {
@@ -564,6 +588,7 @@ exports.getGuideDetails = async (req, res) => {
             id_examen: examen.id_examen,
             tiempo_duracion_minutos: examen.tiempo_duracion_minutos,
             preguntas: preguntasPorExamen.get(examen.id_examen) || [],
+            intentos: intentosPorExamen.get(examen.id_examen) || null,
           }
         : null;
     }

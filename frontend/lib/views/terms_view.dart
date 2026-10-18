@@ -161,7 +161,7 @@ class _TermsViewState extends State<TermsView> {
                       height: 5,
                       decoration: const BoxDecoration(color: _azul, shape: BoxShape.circle),
                     ),
-                    Expanded(child: Text(item, style: _estiloCuerpo)),
+                    Expanded(child: Text(item, textAlign: TextAlign.justify, style: _estiloCuerpo)),
                   ],
                 ),
               ),
@@ -185,7 +185,7 @@ class _TermsViewState extends State<TermsView> {
             const Icon(Icons.info_outline_rounded, size: 18, color: _azul),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(b.texto!, style: _estiloCuerpo.copyWith(color: const Color(0xFF1E3A8A))),
+              child: Text(b.texto!, textAlign: TextAlign.justify, style: _estiloCuerpo.copyWith(color: const Color(0xFF1E3A8A))),
             ),
           ],
         ),
@@ -193,7 +193,7 @@ class _TermsViewState extends State<TermsView> {
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Text(b.texto!, style: _estiloCuerpo),
+      child: Text(b.texto!, textAlign: TextAlign.justify, style: _estiloCuerpo),
     );
   }
 
@@ -219,6 +219,7 @@ class _TermsViewState extends State<TermsView> {
         child: Text(
           'Tienes derecho a acceder, rectificar, cancelar y oponerte al tratamiento de tus datos. '
           'Así puedes ejercer cada uno:',
+          textAlign: TextAlign.justify,
           style: _estiloCuerpo,
         ),
       ),
@@ -234,7 +235,7 @@ class _TermsViewState extends State<TermsView> {
             const Text('Revocar tu consentimiento',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _texto)),
             const SizedBox(height: 8),
-            Text(revocacionTexto, style: _estiloCuerpo),
+            Text(revocacionTexto, textAlign: TextAlign.justify, style: _estiloCuerpo),
           ],
         ),
       ),
@@ -277,9 +278,9 @@ class _TermsViewState extends State<TermsView> {
                 Text(d.nombre,
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _texto)),
                 const SizedBox(height: 2),
-                Text(d.queEs, style: const TextStyle(fontSize: 12, color: _gris)),
+                Text(d.queEs, textAlign: TextAlign.justify, style: const TextStyle(fontSize: 12, color: _gris)),
                 const SizedBox(height: 8),
-                Text(d.comoEnLaApp, style: _estiloCuerpo),
+                Text(d.comoEnLaApp, textAlign: TextAlign.justify, style: _estiloCuerpo),
               ],
             ),
           ),

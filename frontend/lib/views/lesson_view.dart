@@ -327,6 +327,7 @@ class _LessonViewState extends State<LessonView> {
     return [
       Text(
         introduccion,
+        textAlign: TextAlign.justify,
         style: const TextStyle(fontSize: 15, color: _body, height: 1.6),
       ),
       if (conceptos.isNotEmpty) ...[
@@ -381,6 +382,7 @@ class _LessonViewState extends State<LessonView> {
       // Contenido / Texto Generado por Gemini
       Text(
         contenido,
+        textAlign: TextAlign.justify,
         style: const TextStyle(fontSize: 15, color: _body, height: 1.5),
       ),
       const SizedBox(height: 28),
@@ -475,6 +477,7 @@ class _LessonViewState extends State<LessonView> {
                   const SizedBox(height: 4),
                   Text(
                     text,
+                    textAlign: TextAlign.justify,
                     style: const TextStyle(fontSize: 13.5, color: _body, height: 1.45),
                   ),
                 ],
@@ -528,6 +531,7 @@ class _LessonViewState extends State<LessonView> {
                     const SizedBox(height: 8),
                     Text(
                       text,
+                      textAlign: TextAlign.justify,
                       style: const TextStyle(fontSize: 13.5, color: Color(0xFF334155), height: 1.45),
                     ),
                   ],

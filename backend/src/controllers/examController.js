@@ -5,22 +5,66 @@ const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI();
 
 // 1. Tutor de IA para explicar los fundamentos teóricos de los errores
+// Devuelve `fundamentos` (estructurado, para la vista) y `respuesta` (texto plano, compatibilidad)
+const limpiarJson = (texto) => {
+  const sinFences = String(texto).replace(/```json|```/gi, '').trim();
+  const ini = sinFences.indexOf('{');
+  const fin = sinFences.lastIndexOf('}');
+  if (ini === -1 || fin === -1) return null;
+  try {
+    return JSON.parse(sinFences.slice(ini, fin + 1));
+  } catch (_) {
+    return null;
+  }
+};
+
+const fundamentosATexto = (f) => {
+  const partes = [];
+  if (f.resumen) partes.push(f.resumen);
+  (f.errores || []).forEach((e, i) => {
+    partes.push(
+      `${i + 1}. ${e.concepto || 'Concepto'}\n` +
+      `Por qué es incorrecta: ${e.por_que_es_incorrecta || ''}\n` +
+      `Fundamento: ${e.explicacion || ''}\n` +
+      `Idea clave: ${e.clave || ''}`
+    );
+  });
+  return partes.join('\n\n');
+};
+
 exports.askAiTutor = async (req, res) => {
   try {
-    const { prompt, examen_completo, errores } = req.body;
+    const { errores } = req.body;
 
-    let contexto = `Eres un sistema automatizado de retroalimentación académica. Tu única tarea es explicar de forma clara, directa y estrictamente objetiva por qué las respuestas del alumno son incorrectas y cuál es el fundamento teórico correcto. 
-      REGLAS OBLIGATORIAS:
-      1. Ve directo al grano con la explicación técnica y teórica de cada error.
-      2. NO incluyas saludos, despedidas, frases de cortesía ni invitaciones a continuar conversando (prohibido decir cosas como "si tienes dudas", "avísame", "estoy aquí para ayudarte", etc.).
-      3. Mantén un tono formal, académico y conciso.\n\n`;
-
-    if (errores && errores.length > 0) {
-      contexto += `ERRORES COMETIDOS:\n`;
-      errores.forEach((err, index) => {
-        contexto += `${index + 1}. Pregunta: "${err.pregunta}" | Eligió: "${err.respuesta_usuario}" | Correcta: "${err.respuesta_correcta}"\n`;
-      });
+    if (!Array.isArray(errores) || errores.length === 0) {
+      return res.status(400).json({ success: false, message: 'No hay errores para analizar' });
     }
+
+    let contexto = `Eres un sistema de retroalimentación académica. Explica de forma clara, sencilla y objetiva por qué cada respuesta del alumno es incorrecta y cuál es el fundamento teórico correcto.
+REGLAS OBLIGATORIAS:
+1. Lenguaje sencillo, como para un estudiante que ve el tema por primera vez. Frases cortas.
+2. NO incluyas saludos, despedidas ni frases de cortesía.
+3. NO uses markdown (sin asteriscos, sin #, sin viñetas).
+4. Responde ÚNICAMENTE con un JSON válido con esta forma exacta:
+{
+  "resumen": "1 o 2 frases sobre qué temas debe reforzar el alumno en general",
+  "temas_a_repasar": ["tema corto", "tema corto"],
+  "errores": [
+    {
+      "numero": 1,
+      "concepto": "nombre corto del concepto evaluado (máx. 5 palabras)",
+      "por_que_es_incorrecta": "1 o 2 frases explicando el error del alumno",
+      "explicacion": "2 a 4 frases con el fundamento teórico de la respuesta correcta",
+      "clave": "una sola frase fácil de recordar"
+    }
+  ]
+}
+El arreglo "errores" debe tener exactamente ${errores.length} elementos, en el mismo orden que la lista.\n\n`;
+
+    contexto += `ERRORES COMETIDOS:\n`;
+    errores.forEach((err, index) => {
+      contexto += `${index + 1}. Pregunta: "${err.pregunta}" | Eligió: "${err.respuesta_usuario}" | Correcta: "${err.respuesta_correcta}"\n`;
+    });
 
     const modelsToTry = [
       'models/gemini-3.5-flash',
@@ -35,9 +79,10 @@ exports.askAiTutor = async (req, res) => {
         console.log(`Intentando consultar tutor con modelo: ${modelName}...`);
         const response = await ai.models.generateContent({
           model: modelName,
-          contents: `${contexto}\n\nPor favor, genera la retroalimentación teórica global.`,
+          contents: contexto,
+          config: { responseMimeType: 'application/json' },
         });
-        
+
         if (response && response.text) {
           responseText = response.text;
           console.log(`¡Éxito con el modelo ${modelName}!`);
@@ -52,9 +97,13 @@ exports.askAiTutor = async (req, res) => {
       throw new Error('Todos los modelos de Gemini fallaron o están saturados.');
     }
 
+    const fundamentos = limpiarJson(responseText);
+    const valido = fundamentos && Array.isArray(fundamentos.errores);
+
     return res.status(200).json({
       success: true,
-      respuesta: responseText,
+      fundamentos: valido ? fundamentos : null,
+      respuesta: valido ? fundamentosATexto(fundamentos) : responseText,
     });
 
   } catch (error) {
