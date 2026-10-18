@@ -246,7 +246,7 @@ class _CoursesViewState extends State<CoursesView> {
         if (_courses.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('No se pudieron obtener los cursos ($e)'),
+              content: Text('No se pudieron obtener los cursos'),
               backgroundColor: Colors.red,
             ),
           );

@@ -760,7 +760,6 @@ class _StudyViewState extends State<StudyView>
     required VoidCallback onTap,
   }) {
     final int totalPreguntas = (examen['preguntas'] as List?)?.length ?? 0;
-    final int duracion = examen['tiempo_duracion_minutos'] ?? 15;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

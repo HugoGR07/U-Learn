@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/services/api_service.dart';
 import 'login_view.dart';
+import 'terms_view.dart';
 
 class RegisterView extends StatefulWidget {
   const RegisterView({super.key});
@@ -18,6 +19,7 @@ class _RegisterViewState extends State<RegisterView> {
   final TextEditingController _confirmPasswordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _aceptaTerminos = false;
 
   @override
   void dispose() {
@@ -65,6 +67,15 @@ class _RegisterViewState extends State<RegisterView> {
       _showFloatingDialog(
         title: 'Contraseña débil',
         message: 'La contraseña debe tener al menos 6 caracteres.',
+        isSuccess: false,
+      );
+      return;
+    }
+
+    if (!_aceptaTerminos) {
+      _showFloatingDialog(
+        title: 'Falta tu aceptación',
+        message: 'Para crear tu cuenta debes aceptar los Términos y Condiciones y el Aviso de Privacidad.',
         isSuccess: false,
       );
       return;
@@ -332,26 +343,7 @@ class _RegisterViewState extends State<RegisterView> {
 
               const SizedBox(height: 20),
 
-              RichText(
-                textAlign: TextAlign.center,
-                text: const TextSpan(
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    height: 1.4,
-                  ),
-                  children: [
-                    TextSpan(text: 'Al registrarte aceptas nuestros\n'),
-                    TextSpan(
-                      text: 'Términos y Condiciones y Política de privacidad.',
-                      style: TextStyle(
-                        color: Color(0xFF1D61E7),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _casillaTerminos(),
 
               const SizedBox(height: 20),
 
@@ -420,6 +412,78 @@ class _RegisterViewState extends State<RegisterView> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _abrirTerminos(int pestana) async {
+    final acepto = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TermsView(
+          pestanaInicial: pestana,
+          modoAceptar: true,
+          yaAceptado: _aceptaTerminos,
+        ),
+      ),
+    );
+    if (acepto != null && mounted) setState(() => _aceptaTerminos = acepto);
+  }
+
+  Widget _casillaTerminos() {
+    const link = TextStyle(
+      fontSize: 12,
+      height: 1.4,
+      color: Color(0xFF1D61E7),
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+      decorationColor: Color(0xFF1D61E7),
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: Checkbox(
+            value: _aceptaTerminos,
+            activeColor: const Color(0xFF1D61E7),
+            side: const BorderSide(color: Color(0xFF94A3B8), width: 1.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+            onChanged: (v) => setState(() => _aceptaTerminos = v ?? false),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Padding(
+            padding: EdgeInsets.zero,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () => setState(() => _aceptaTerminos = !_aceptaTerminos),
+                  child: const Text('He leído y acepto los ',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
+                ),
+                GestureDetector(
+                  onTap: () => _abrirTerminos(0),
+                  child: const Text('Términos y Condiciones',
+                      style: link),
+                ),
+                const Text(' y el ',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
+                GestureDetector(
+                  onTap: () => _abrirTerminos(1),
+                  child: const Text('Aviso de Privacidad',
+                      style: link),
+                ),
+                const Text('.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

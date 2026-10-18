@@ -5,6 +5,7 @@ import 'home_view.dart';
 import '../services/notification_service.dart';
 import '../widgets/foto_perfil.dart';
 import '../widgets/encabezado_azul.dart';
+import 'terms_view.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -1085,6 +1086,15 @@ class _ProfileViewState extends State<ProfileView> {
                     title: 'Notificaciones',
                     iconColor: const Color(0xFFD97706),
                     onTap: _showNotificationsSettingsModal,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildProfileOption(
+                    icon: Icons.shield_outlined,
+                    title: 'Términos y privacidad',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TermsView()),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _buildProfileOption(

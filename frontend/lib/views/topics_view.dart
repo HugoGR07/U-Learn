@@ -86,7 +86,7 @@ class _TopicsViewState extends State<TopicsView>
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al obtener los temas: $e'),
+          content: Text('Error al obtener los temas'),
           backgroundColor: Colors.red,
         ),
       );

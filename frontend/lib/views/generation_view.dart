@@ -99,13 +99,6 @@ class _GenerationgGuideViewState extends State<GenerationView> {
     );
   }
 
-  int get _seccionesEstimadas {
-    final semanas = widget.duracionSemanas < 1
-        ? 1
-        : (widget.duracionSemanas > 4 ? 4 : widget.duracionSemanas);
-    return semanas * 3;
-  }
-
   @override
   Widget build(BuildContext context) {
     final int percentage = (_progress * 100).toInt();
