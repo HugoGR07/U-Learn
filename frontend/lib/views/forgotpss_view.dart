@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class ForgotpssView extends StatefulWidget {
   const ForgotpssView({super.key});
@@ -39,77 +41,12 @@ class _ForgotpssViewState extends State<ForgotpssView> {
     required bool isSuccess,
     VoidCallback? onConfirm,
   }) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 10,
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
-                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _oscuro,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: _gris,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    if (onConfirm != null) onConfirm();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _azul,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Aceptar',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    AlertaFlotante.mostrar(
+      context,
+      titulo: title,
+      mensaje: message,
+      tipo: isSuccess ? TipoAlerta.exito : TipoAlerta.error,
+      alConfirmar: onConfirm,
     );
   }
 
@@ -124,29 +61,25 @@ class _ForgotpssViewState extends State<ForgotpssView> {
       return;
     }
     setState(() => _cargando = true);
-    try {
-      final res = await ApiService.forgotPassword(correo);
-      if (!mounted) return;
-      setState(() => _cargando = false);
-      if (res['success'] == true) {
-        _codigoController.clear();
-        setState(() => _paso = 1);
-        _showFloatingDialog(
-          title: 'Código enviado 📩',
-          message: res['message']?.toString() ??
-              'Te enviamos un código de 6 dígitos a tu correo.',
-          isSuccess: true,
-        );
-      } else {
-        _showFloatingDialog(
-          title: 'Aviso',
-          message: res['message']?.toString() ??
-              'No se pudo enviar el código, inténtalo de nuevo.',
-          isSuccess: false,
-        );
-      }
-    } catch (_) {
-      _errorConexion();
+    final res = await ApiService.forgotPassword(correo);
+    if (!mounted) return;
+    setState(() => _cargando = false);
+    if (res['success'] == true) {
+      _codigoController.clear();
+      setState(() => _paso = 1);
+      _showFloatingDialog(
+        title: 'Código enviado 📩',
+        message: res['message']?.toString() ??
+            'Te enviamos un código de 6 dígitos a tu correo.',
+        isSuccess: true,
+      );
+    } else {
+      _showFloatingDialog(
+        title: 'Aviso',
+        message: res['message']?.toString() ??
+            'No se pudo enviar el código, inténtalo de nuevo.',
+        isSuccess: false,
+      );
     }
   }
 
@@ -161,22 +94,18 @@ class _ForgotpssViewState extends State<ForgotpssView> {
       return;
     }
     setState(() => _cargando = true);
-    try {
-      final res = await ApiService.verifyResetCode(_emailController.text.trim(), codigo);
-      if (!mounted) return;
-      setState(() => _cargando = false);
-      if (res['success'] == true) {
-        setState(() => _paso = 2);
-      } else {
-        _showFloatingDialog(
-          title: 'Código incorrecto',
-          message: res['message']?.toString() ??
-              'El código no es válido o ya venció, verifícalo.',
-          isSuccess: false,
-        );
-      }
-    } catch (_) {
-      _errorConexion();
+    final res = await ApiService.verifyResetCode(_emailController.text.trim(), codigo);
+    if (!mounted) return;
+    setState(() => _cargando = false);
+    if (res['success'] == true) {
+      setState(() => _paso = 2);
+    } else {
+      _showFloatingDialog(
+        title: 'Código incorrecto',
+        message: res['message']?.toString() ??
+            'El código no es válido o ya venció, verifícalo.',
+        isSuccess: false,
+      );
     }
   }
 
@@ -207,44 +136,30 @@ class _ForgotpssViewState extends State<ForgotpssView> {
       return;
     }
     setState(() => _cargando = true);
-    try {
-      final res = await ApiService.resetPassword(
-        correo: _emailController.text.trim(),
-        codigo: _codigoController.text.trim(),
-        nuevaContrasena: pass,
-      );
-      if (!mounted) return;
-      setState(() => _cargando = false);
-      if (res['success'] == true) {
-        _showFloatingDialog(
-          title: '¡Contraseña actualizada! 🎉',
-          message: 'Tu contraseña se cambió correctamente, inicia sesión para ingresar.',
-          isSuccess: true,
-          onConfirm: () {
-            if (mounted) Navigator.pop(context);
-          },
-        );
-      } else {
-        _showFloatingDialog(
-          title: 'Aviso',
-          message: res['message']?.toString() ??
-              'No se pudo cambiar la contraseña, inténtalo de nuevo.',
-          isSuccess: false,
-        );
-      }
-    } catch (_) {
-      _errorConexion();
-    }
-  }
-
-  void _errorConexion() {
+    final res = await ApiService.resetPassword(
+      correo: _emailController.text.trim(),
+      codigo: _codigoController.text.trim(),
+      nuevaContrasena: pass,
+    );
     if (!mounted) return;
     setState(() => _cargando = false);
-    _showFloatingDialog(
-      title: 'Error de conexión',
-      message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
-      isSuccess: false,
-    );
+    if (res['success'] == true) {
+      _showFloatingDialog(
+        title: '¡Contraseña actualizada! 🎉',
+        message: 'Tu contraseña se cambió correctamente, inicia sesión para ingresar.',
+        isSuccess: true,
+        onConfirm: () {
+          if (mounted) Navigator.pop(context);
+        },
+      );
+    } else {
+      _showFloatingDialog(
+        title: 'Aviso',
+        message: res['message']?.toString() ??
+            'No se pudo cambiar la contraseña, inténtalo de nuevo.',
+        isSuccess: false,
+      );
+    }
   }
 
   void _atras() {
@@ -413,7 +328,7 @@ class _ForgotpssViewState extends State<ForgotpssView> {
           onSubmitted: (_) => _cambiarContrasena(),
         ),
         const SizedBox(height: 24),
-        _boton('Guardar contraseña', _cambiarContrasena),
+        _boton('Cambiar', _cambiarContrasena),
       ],
     );
   }
@@ -430,55 +345,58 @@ class _ForgotpssViewState extends State<ForgotpssView> {
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _oscuro, size: 20),
-                        onPressed: _atras,
+            child: AnchoMaximo(
+              maximo: 480,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _oscuro, size: 20),
+                          onPressed: _atras,
+                        ),
                       ),
-                    ),
-                    const Text(
-                      'Recuperar contraseña',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _oscuro),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(3, (i) {
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: i == _paso ? 24 : 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: i <= _paso ? _azul : const Color(0xFFE2E8F0),
-                        borderRadius: BorderRadius.circular(4),
+                      const Text(
+                        'Recuperar contraseña',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _oscuro),
                       ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 24),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: KeyedSubtree(
-                    key: ValueKey(_paso),
-                    child: _paso == 0
-                        ? _pasoCorreo()
-                        : _paso == 1
-                            ? _pasoCodigo()
-                            : _pasoNuevaContrasena(),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 24),
-              ],
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(3, (i) {
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: i == _paso ? 24 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: i <= _paso ? _azul : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 24),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: KeyedSubtree(
+                      key: ValueKey(_paso),
+                      child: _paso == 0
+                          ? _pasoCorreo()
+                          : _paso == 1
+                              ? _pasoCodigo()
+                              : _pasoNuevaContrasena(),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),

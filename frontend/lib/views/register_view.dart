@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:frontend/services/api_service.dart';
 import 'login_view.dart';
 import 'terms_view.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class RegisterView extends StatefulWidget {
   const RegisterView({super.key});
@@ -91,11 +93,10 @@ class _RegisterViewState extends State<RegisterView> {
       contrasena: contrasena,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (!mounted) return;
-
-    if (result['success']) {
+    if (result['success'] == true) {
       _showFloatingDialog(
         title: '¡Registro exitoso! 🎉',
         message: 'Usuario registrado correctamente, inicia sesión para ingresar.',
@@ -108,8 +109,9 @@ class _RegisterViewState extends State<RegisterView> {
         },
       );
     } else {
-      String msgError = result['message']?.toString() ?? 'Error al registrar';
-      if (msgError.toLowerCase().contains('correo') || msgError.toLowerCase().contains('registrado')) {
+      String msgError = result['message']?.toString() ?? 'No se pudo crear tu cuenta. Inténtalo de nuevo.';
+      if (result['conexion'] != true &&
+          (msgError.toLowerCase().contains('correo') || msgError.toLowerCase().contains('registrado'))) {
         msgError = 'El correo que ingresaste ya está registrado. Intenta con otro correo para ingresar.';
       }
       _showFloatingDialog(
@@ -127,77 +129,12 @@ class _RegisterViewState extends State<RegisterView> {
     required bool isSuccess,
     VoidCallback? onConfirm,
   }) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 10,
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
-                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    if (onConfirm != null) onConfirm();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D61E7),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Aceptar',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    AlertaFlotante.mostrar(
+      context,
+      titulo: title,
+      mensaje: message,
+      tipo: isSuccess ? TipoAlerta.exito : TipoAlerta.error,
+      alConfirmar: onConfirm,
     );
   }
 
@@ -208,207 +145,210 @@ class _RegisterViewState extends State<RegisterView> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
+          child: AnchoMaximo(
+            maximo: 480,
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
 
-              // Barra superior con botón Atrás
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Color(0xFF1E293B),
-                        size: 20,
+                // Barra superior con botón Atrás
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Color(0xFF1E293B),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          Navigator.popUntil(context, (route) => route.isFirst);
+                        },
                       ),
-                      onPressed: () {
-                        Navigator.popUntil(context, (route) => route.isFirst);
-                      },
                     ),
-                  ),
-                  const Text(
-                    'Crear cuenta',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Logo
-              Container(
-                width: 70,
-                height: 70,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                    const Text(
+                      'Crear cuenta',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.school_rounded,
-                        size: 36,
-                        color: Color(0xFF1D61E7),
-                      );
-                    },
-                  ),
-                ),
-              ),
 
-              const SizedBox(height: 10),
+                const SizedBox(height: 16),
 
-              const Text(
-                'Únete a U-Learn',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Campo Nombre
-              _buildInputField(
-                controller: _nameController,
-                hintText: 'Nombre(s)',
-                icon: Icons.person_outline_rounded,
-              ),
-
-              const SizedBox(height: 14),
-
-              // Campo Apellido Paterno
-              _buildInputField(
-                controller: _paternoController,
-                hintText: 'Apellido paterno',
-                icon: Icons.badge_outlined,
-              ),
-
-              const SizedBox(height: 14),
-
-              // Campo Apellido Materno
-              _buildInputField(
-                controller: _maternoController,
-                hintText: 'Apellido materno (opcional)',
-                icon: Icons.badge_outlined,
-              ),
-
-              const SizedBox(height: 14),
-
-              // Campo Correo
-              _buildInputField(
-                controller: _emailController,
-                hintText: 'Correo electrónico',
-                icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
-              ),
-
-              const SizedBox(height: 14),
-
-              // Campo Contraseña
-              _buildInputField(
-                controller: _passwordController,
-                hintText: 'Contraseña',
-                icon: Icons.lock_outline_rounded,
-                isPassword: true,
-              ),
-
-              const SizedBox(height: 14),
-
-              // Campo Confirmar Contraseña
-              _buildInputField(
-                controller: _confirmPasswordController,
-                hintText: 'Confirmar contraseña',
-                icon: Icons.lock_outline_rounded,
-                isPassword: true,
-              ),
-
-              const SizedBox(height: 20),
-
-              _casillaTerminos(),
-
-              const SizedBox(height: 20),
-
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleRegister,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  backgroundColor: const Color(0xFF1D61E7),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : const Text(
-                        'Crear cuenta',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                // Logo
+                Container(
+                  width: 70,
+                  height: 70,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-              ),
-
-              const SizedBox(height: 20),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    '¿Ya tienes cuenta? ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF64748B),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.school_rounded,
+                          size: 36,
+                          color: Color(0xFF1D61E7),
+                        );
+                      },
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => const LoginView()),
-                      );
-                    },
-                    child: const Text(
-                      'Iniciar sesión',
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  'Únete a U-Learn',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Campo Nombre
+                _buildInputField(
+                  controller: _nameController,
+                  hintText: 'Nombre(s)',
+                  icon: Icons.person_outline_rounded,
+                ),
+
+                const SizedBox(height: 14),
+
+                // Campo Apellido Paterno
+                _buildInputField(
+                  controller: _paternoController,
+                  hintText: 'Apellido paterno',
+                  icon: Icons.badge_outlined,
+                ),
+
+                const SizedBox(height: 14),
+
+                // Campo Apellido Materno
+                _buildInputField(
+                  controller: _maternoController,
+                  hintText: 'Apellido materno (opcional)',
+                  icon: Icons.badge_outlined,
+                ),
+
+                const SizedBox(height: 14),
+
+                // Campo Correo
+                _buildInputField(
+                  controller: _emailController,
+                  hintText: 'Correo electrónico',
+                  icon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+
+                const SizedBox(height: 14),
+
+                // Campo Contraseña
+                _buildInputField(
+                  controller: _passwordController,
+                  hintText: 'Contraseña',
+                  icon: Icons.lock_outline_rounded,
+                  isPassword: true,
+                ),
+
+                const SizedBox(height: 14),
+
+                // Campo Confirmar Contraseña
+                _buildInputField(
+                  controller: _confirmPasswordController,
+                  hintText: 'Confirmar contraseña',
+                  icon: Icons.lock_outline_rounded,
+                  isPassword: true,
+                ),
+
+                const SizedBox(height: 20),
+
+                _casillaTerminos(),
+
+                const SizedBox(height: 20),
+
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleRegister,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 52),
+                    backgroundColor: const Color.fromARGB(255, 11, 13, 15),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text(
+                          'Crear cuenta',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+
+                const SizedBox(height: 20),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      '¿Ya tienes cuenta? ',
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1D61E7),
+                        color: Color(0xFF64748B),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginView()),
+                        );
+                      },
+                      child: const Text(
+                        'Iniciar sesión',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1D61E7),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
 
-              const SizedBox(height: 20),
-            ],
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),

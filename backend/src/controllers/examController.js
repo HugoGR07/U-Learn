@@ -1,8 +1,5 @@
 const db = require('../config/db');
-const { GoogleGenAI } = require('@google/genai');
-
-// Inicializamos el cliente oficial de Gemini usando tu GEMINI_API_KEY del .env
-const ai = new GoogleGenAI();
+const { generarContenido, IANoDisponibleError, MENSAJE_IA_SATURADA } = require('../services/geminiService');
 
 // 1. Tutor de IA para explicar los fundamentos teóricos de los errores
 // Devuelve `fundamentos` (estructurado, para la vista) y `respuesta` (texto plano, compatibilidad)
@@ -66,36 +63,12 @@ El arreglo "errores" debe tener exactamente ${errores.length} elementos, en el m
       contexto += `${index + 1}. Pregunta: "${err.pregunta}" | Eligió: "${err.respuesta_usuario}" | Correcta: "${err.respuesta_correcta}"\n`;
     });
 
-    const modelsToTry = [
-      'models/gemini-3.5-flash',
-      'models/gemini-3.6-flash',
-      'models/gemini-3.7-flash'
-    ];
-
-    let responseText = null;
-
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`Intentando consultar tutor con modelo: ${modelName}...`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: contexto,
-          config: { responseMimeType: 'application/json' },
-        });
-
-        if (response && response.text) {
-          responseText = response.text;
-          console.log(`¡Éxito con el modelo ${modelName}!`);
-          break;
-        }
-      } catch (modelError) {
-        console.warn(`Falló el modelo ${modelName}. Probando el siguiente...`);
-      }
-    }
-
-    if (!responseText) {
-      throw new Error('Todos los modelos de Gemini fallaron o están saturados.');
-    }
+    const responseText = await generarContenido({
+      contents: contexto,
+      config: { responseMimeType: 'application/json' },
+      etiqueta: 'tutor',
+      presupuestoMs: 80000,
+    });
 
     const fundamentos = limpiarJson(responseText);
     const valido = fundamentos && Array.isArray(fundamentos.errores);
@@ -108,9 +81,12 @@ El arreglo "errores" debe tener exactamente ${errores.length} elementos, en el m
 
   } catch (error) {
     console.error('Error en el tutor de IA:', error);
+    if (error instanceof IANoDisponibleError) {
+      return res.status(503).json({ success: false, message: MENSAJE_IA_SATURADA });
+    }
     return res.status(500).json({
       success: false,
-      message: 'Error al procesar la consulta con el tutor de IA',
+      message: 'El tutor no pudo responder en este momento. Inténtalo de nuevo en unos minutos.',
     });
   }
 };

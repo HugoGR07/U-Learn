@@ -6,6 +6,8 @@ import '../services/notification_service.dart';
 import '../widgets/foto_perfil.dart';
 import '../widgets/encabezado_azul.dart';
 import 'terms_view.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -37,8 +39,8 @@ class _ProfileViewState extends State<ProfileView> {
     });
   }
 
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(String msg, {String titulo = 'Aviso', TipoAlerta tipo = TipoAlerta.aviso}) {
+    AlertaFlotante.mostrar(context, titulo: titulo, mensaje: msg, tipo: tipo);
   }
 
   // VENTANA FLOTANTE (mismo estilo que login, registro y recuperar contraseña)
@@ -48,77 +50,12 @@ class _ProfileViewState extends State<ProfileView> {
     required bool isSuccess,
     VoidCallback? onConfirm,
   }) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 10,
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
-                  color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    if (onConfirm != null) onConfirm();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D61E7),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Aceptar',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    AlertaFlotante.mostrar(
+      context,
+      titulo: title,
+      mensaje: message,
+      tipo: isSuccess ? TipoAlerta.exito : TipoAlerta.error,
+      alConfirmar: onConfirm,
     );
   }
 
@@ -152,7 +89,7 @@ class _ProfileViewState extends State<ProfileView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Padding(
+        return SingleChildScrollView(
           padding: EdgeInsets.only(
             top: 20,
             left: 20,
@@ -220,7 +157,7 @@ class _ProfileViewState extends State<ProfileView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
@@ -300,23 +237,11 @@ class _ProfileViewState extends State<ProfileView> {
 
                             setModalState(() => isSaving = true);
 
-                            Map<String, dynamic> res;
-                            try {
-                              res = await ApiService.updateProfile(
-                                nombre: nombreCtrl.text.trim(),
-                                apellidoPaterno: paternoCtrl.text.trim(),
-                                apellidoMaterno: maternoCtrl.text.trim(),
-                              );
-                            } catch (_) {
-                              if (!mounted) return;
-                              setModalState(() => isSaving = false);
-                              _showFloatingDialog(
-                                title: 'Error de conexión',
-                                message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
-                                isSuccess: false,
-                              );
-                              return;
-                            }
+                            final res = await ApiService.updateProfile(
+                              nombre: nombreCtrl.text.trim(),
+                              apellidoPaterno: paternoCtrl.text.trim(),
+                              apellidoMaterno: maternoCtrl.text.trim(),
+                            );
 
                             if (!mounted) return;
                             setModalState(() => isSaving = false);
@@ -377,7 +302,7 @@ class _ProfileViewState extends State<ProfileView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
@@ -417,8 +342,8 @@ class _ProfileViewState extends State<ProfileView> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: FotoPerfil.total,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 5,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 76,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
                     ),
@@ -521,7 +446,7 @@ class _ProfileViewState extends State<ProfileView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
@@ -595,22 +520,10 @@ class _ProfileViewState extends State<ProfileView> {
 
                             setModalState(() => isChanging = true);
 
-                            Map<String, dynamic> res;
-                            try {
-                              res = await ApiService.changePassword(
-                                currentPassword: currentPass,
-                                newPassword: newPass,
-                              );
-                            } catch (_) {
-                              if (!mounted) return;
-                              setModalState(() => isChanging = false);
-                              _showFloatingDialog(
-                                title: 'Error de conexión',
-                                message: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
-                                isSuccess: false,
-                              );
-                              return;
-                            }
+                            final res = await ApiService.changePassword(
+                              currentPassword: currentPass,
+                              newPassword: newPass,
+                            );
 
                             if (!mounted) return;
                             setModalState(() => isChanging = false);
@@ -642,7 +555,7 @@ class _ProfileViewState extends State<ProfileView> {
                             width: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : const Text('Guardar contraseña', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        : const Text('Actualizar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -703,7 +616,10 @@ class _ProfileViewState extends State<ProfileView> {
                   value: _pushNotifications,
                   onChanged: (val) async {
                     if (val && !await NotificationService.requestPermission()) {
-                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      _snack(
+                        'Activa los permisos de notificaciones en Ajustes del teléfono.',
+                        titulo: 'Permiso necesario',
+                      );
                       return;
                     }
                     await NotificationService.setPush(val);
@@ -722,9 +638,13 @@ class _ProfileViewState extends State<ProfileView> {
                   subtitle: const Text('Resumen semanal de tu progreso', style: TextStyle(fontSize: 12)),
                   value: _emailNotifications,
                   onChanged: (val) async {
-                    final ok = await ApiService.updateNotificationSettings(emailAlerts: val);
-                    if (!ok) {
-                      _snack('No se pudo guardar la preferencia.');
+                    final res = await ApiService.updateNotificationSettingsDetallado(emailAlerts: val);
+                    if (res['success'] != true) {
+                      _snack(
+                        res['message']?.toString() ?? 'No se pudo guardar tu preferencia. Inténtalo de nuevo.',
+                        titulo: 'No se guardó el cambio',
+                        tipo: TipoAlerta.error,
+                      );
                       return;
                     }
                     setModalState(() => _emailNotifications = val);
@@ -739,7 +659,10 @@ class _ProfileViewState extends State<ProfileView> {
                   value: _reminderNotifications,
                   onChanged: (val) async {
                     if (val && !await NotificationService.requestPermission()) {
-                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      _snack(
+                        'Activa los permisos de notificaciones en Ajustes del teléfono.',
+                        titulo: 'Permiso necesario',
+                      );
                       return;
                     }
                     await NotificationService.setReminder(val);
@@ -767,8 +690,8 @@ class _ProfileViewState extends State<ProfileView> {
         ),
         const SizedBox(height: 10),
         _buildFaqTile(
-          'Error "No se pudo conectar con el servidor"',
-          'Asegúrate de tener conexión a Internet y que tu backend Node.js esté activo en el mismo puerto.',
+          'Aparece "Sin conexión" o "Error de conexión"',
+          'Revisa que tengas Wi-Fi o datos móviles activos. Si tu conexión está bien, espera unos minutos e inténtalo de nuevo.',
         ),
         _buildFaqTile(
           'Mi guía con IA tarda en generar',
@@ -796,7 +719,7 @@ class _ProfileViewState extends State<ProfileView> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10.0),
-          child: Text(answer, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
+          child: Text(answer, textAlign: TextAlign.justify, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
         ),
       ],
     );
@@ -849,103 +772,21 @@ class _ProfileViewState extends State<ProfileView> {
   // 6. Confirmación de Cerrar Sesión
   bool _cerrandoSesion = false;
 
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 10,
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFEF2F2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.logout_rounded,
-                  color: Color(0xFFEF4444),
-                  size: 34,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '¿Cerrar sesión?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Evita que un doble toque dispare el cierre de sesión dos veces
-                    if (_cerrandoSesion) return;
-                    _cerrandoSesion = true;
-                    Navigator.pop(dialogContext);
-                    _cerrarSesion();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEF4444),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Cerrar sesión',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'Cancelar',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _showLogoutDialog() async {
+    final confirmado = await AlertaFlotante.confirmar(
+      context,
+      titulo: '¿Cerrar sesión?',
+      mensaje: 'Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.',
+      tipo: TipoAlerta.error,
+      icono: Icons.logout_rounded,
+      textoConfirmar: 'Cerrar sesión',
+      textoCancelar: 'Cancelar',
+      colorConfirmar: const Color(0xFFEF4444),
     );
+    // Evita que un doble toque dispare el cierre de sesión dos veces
+    if (!confirmado || _cerrandoSesion || !mounted) return;
+    _cerrandoSesion = true;
+    _cerrarSesion();
   }
 
   @override
@@ -1059,80 +900,83 @@ class _ProfileViewState extends State<ProfileView> {
             const SizedBox(height: 24),
 
             // 3. Menú de Opciones
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  _buildProfileOption(
-                    icon: Icons.person_outline_rounded,
-                    title: 'Información personal',
-                    onTap: _showPersonalInfoModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.photo_camera_outlined,
-                    title: 'Foto de perfil',
-                    onTap: _showFotoPerfilModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.lock_outline_rounded,
-                    title: 'Cambiar contraseña',
-                    onTap: _showChangePasswordModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.notifications_none_rounded,
-                    title: 'Notificaciones',
-                    iconColor: const Color(0xFFD97706),
-                    onTap: _showNotificationsSettingsModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.shield_outlined,
-                    title: 'Términos y privacidad',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TermsView()),
+            AnchoMaximo(
+              maximo: 620,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  children: [
+                    _buildProfileOption(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Información personal',
+                      onTap: _showPersonalInfoModal,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.help_outline_rounded,
-                    title: 'Ayuda y soporte',
-                    onTap: _showHelpSupportModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.info_outline_rounded,
-                    title: 'Acerca de U-Learn',
-                    onTap: _showAboutModal,
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  // 4. Botón Cerrar Sesión
-                  OutlinedButton(
-                    onPressed: _showLogoutDialog,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.photo_camera_outlined,
+                      title: 'Foto de perfil',
+                      onTap: _showFotoPerfilModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.lock_outline_rounded,
+                      title: 'Cambiar contraseña',
+                      onTap: _showChangePasswordModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'Notificaciones',
+                      iconColor: const Color(0xFFD97706),
+                      onTap: _showNotificationsSettingsModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.shield_outlined,
+                      title: 'Términos y privacidad',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const TermsView()),
                       ),
                     ),
-                    child: const Text(
-                      'Cerrar sesión',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFEF4444),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.help_outline_rounded,
+                      title: 'Ayuda y soporte',
+                      onTap: _showHelpSupportModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.info_outline_rounded,
+                      title: 'Acerca de U-Learn',
+                      onTap: _showAboutModal,
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // 4. Botón Cerrar Sesión
+                    OutlinedButton(
+                      onPressed: _showLogoutDialog,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cerrar sesión',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFEF4444),
+                        ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           ],

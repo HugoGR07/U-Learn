@@ -189,7 +189,7 @@ class RespuestaFila extends StatelessWidget {
                   etiqueta.toUpperCase(),
                   style: TextStyle(
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 0.6,
                     color: oscuro,
                   ),
@@ -202,7 +202,7 @@ class RespuestaFila extends StatelessWidget {
                     fontSize: 13.5,
                     height: 1.35,
                     color: Color(0xFF1E293B),
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.normal,
                   ),
                 ),
               ],

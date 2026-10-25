@@ -132,6 +132,9 @@ class _EncabezadoAzulState extends State<EncabezadoAzul>
 
   @override
   Widget build(BuildContext context) {
+    final horizontal = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final arriba = horizontal ? 6.0 : (widget.grande ? 16.0 : 12.0);
+    final abajo = horizontal ? 14.0 : (widget.grande ? 30.0 : 24.0);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -182,9 +185,9 @@ class _EncabezadoAzulState extends State<EncabezadoAzul>
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             20,
-            widget.grande ? 16 : 12,
+            arriba,
             20,
-            (widget.grande ? 30 : 24) + widget.extraBottom,
+            abajo + widget.extraBottom,
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(

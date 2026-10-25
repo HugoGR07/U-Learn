@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'login_view.dart';
 import 'register_view.dart';
+import '../widgets/responsivo.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -205,173 +206,244 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
 
             // Contenido Principal
             SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  children: [
-                    const Spacer(flex: 2),
-
-                    // Logo: aparece con rebote y luego "flota"
-                    AnimatedBuilder(
-                      animation:
-                          Listenable.merge([_introController, _loopController]),
-                      builder: (context, child) {
-                        final t = _loopController.value * 2 * math.pi;
-                        final floatY = math.sin(t * 3) * 6;
-                        final breathe = 1 + math.sin(t * 3) * 0.02;
-                        return Opacity(
-                          opacity: logoFade.value,
-                          child: Transform.translate(
-                            offset: Offset(0, floatY),
-                            child: Transform.scale(
-                              scale: logoAnim.value * breathe,
-                              child: child,
-                            ),
-                          ),
-                        );
-                      },
-                      child: _buildLogo(),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    _fadeSlide(
-                      const Text(
-                        'U-Learn',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Color.fromARGB(255, 95, 196, 255),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      0.25,
-                      0.55,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    _fadeSlide(
-                      const Text(
-                        'Educación Financiera Inteligente',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color:Color.fromARGB(255, 255, 251, 12),
-                        ),
-                      ),
-                      0.35,
-                      0.65,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _fadeSlide(
-                      const Text(
-                        'Aprende hoy,\nmejora tu futuro financiero.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          height: 1.35,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      0.45,
-                      0.75,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    _fadeSlide(
-                      const Text(
-                        'By Syncore • Guías & Exámenes con IA',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white70,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      0.55,
-                      0.85,
-                    ),
-
-                    const Spacer(flex: 3),
-
-                    // Botón 1: Iniciar Sesión
-                    _fadeSlide(
-                      _PressableScale(
-                        onTap: () => _goTo(const LoginView()),
-                        child: Container(
-                          height: 52,
-                          width: double.infinity,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: const Text(
-                            'Iniciar Sesión',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0D47A1),
-                            ),
-                          ),
-                        ),
-                      ),
-                      0.65,
-                      0.95,
-                      offsetY: 40,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Botón 2: Registrarse
-                    _fadeSlide(
-                      _PressableScale(
-                        onTap: () => _goTo(const RegisterView()),
-                        child: Container(
-                          height: 52,
-                          width: double.infinity,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white, width: 1.8),
-                          ),
-                          child: const Text(
-                            'Registrarse',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      0.72,
-                      1.0,
-                      offsetY: 40,
-                    ),
-
-                    const SizedBox(height: 36),
-                  ],
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final horizontal = constraints.maxWidth > constraints.maxHeight;
+                  return horizontal
+                      ? _contenidoHorizontal(logoAnim, logoFade)
+                      : _contenidoVertical(constraints, logoAnim, logoFade);
+                },
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _contenidoVertical(
+    BoxConstraints constraints,
+    Animation<double> logoAnim,
+    Animation<double> logoFade,
+  ) {
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: IntrinsicHeight(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Column(
+              children: [
+                const Spacer(flex: 2),
+                const SizedBox(height: 16),
+                _logoAnimado(logoAnim, logoFade, 120),
+                const SizedBox(height: 24),
+                ..._textos(),
+                const Spacer(flex: 3),
+                const SizedBox(height: 24),
+                ..._botones(),
+                const SizedBox(height: 36),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _contenidoHorizontal(Animation<double> logoAnim, Animation<double> logoFade) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: CentradoDesplazable(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _logoAnimado(logoAnim, logoFade, 84),
+                  const SizedBox(height: 14),
+                  ..._textos(compacto: true),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 32),
+          Expanded(
+            child: CentradoDesplazable(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _botones(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _logoAnimado(Animation<double> logoAnim, Animation<double> logoFade, double tam) {
+    // Logo: aparece con rebote y luego "flota"
+    return AnimatedBuilder(
+      animation: Listenable.merge([_introController, _loopController]),
+      builder: (context, child) {
+        final t = _loopController.value * 2 * math.pi;
+        final floatY = math.sin(t * 3) * 6;
+        final breathe = 1 + math.sin(t * 3) * 0.02;
+        return Opacity(
+          opacity: logoFade.value.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, floatY),
+            child: Transform.scale(
+              scale: logoAnim.value * breathe,
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: SizedBox(
+        width: tam,
+        height: tam,
+        child: FittedBox(child: _buildLogo()),
+      ),
+    );
+  }
+
+  List<Widget> _textos({bool compacto = false}) {
+    return [
+      _fadeSlide(
+        Text(
+          'U-Learn',
+          style: TextStyle(
+            fontSize: compacto ? 30 : 36,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 0.5,
+          ),
+        ),
+        0.25,
+        0.55,
+      ),
+
+      SizedBox(height: compacto ? 10 : 40),
+
+      _fadeSlide(
+        Text(
+          'Educación Financiera Inteligente',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: compacto ? 18 : 20,
+            fontWeight: FontWeight.w900,
+            color: const Color.fromARGB(255, 255, 251, 12),
+          ),
+        ),
+        0.35,
+        0.65,
+      ),
+
+      SizedBox(height: compacto ? 8 : 12),
+
+      _fadeSlide(
+        const Text(
+          'Aprende hoy,\nmejora tu futuro financiero.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.white,
+            height: 1.35,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        0.45,
+        0.75,
+      ),
+
+      SizedBox(height: compacto ? 12 : 20),
+
+      _fadeSlide(
+        const Text(
+          'By Syncore • Guías & Exámenes con IA',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white70,
+            letterSpacing: 0.5,
+          ),
+        ),
+        0.55,
+        0.85,
+      ),
+    ];
+  }
+
+  List<Widget> _botones() {
+    return [
+      // Botón 1: Iniciar Sesión
+      _fadeSlide(
+        _PressableScale(
+          onTap: () => _goTo(const LoginView()),
+          child: Container(
+            height: 52,
+            width: double.infinity,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Text(
+              'Iniciar Sesión',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0D47A1),
+              ),
+            ),
+          ),
+        ),
+        0.65,
+        0.95,
+        offsetY: 40,
+      ),
+
+      const SizedBox(height: 12),
+
+      // Botón 2: Registrarse
+      _fadeSlide(
+        _PressableScale(
+          onTap: () => _goTo(const RegisterView()),
+          child: Container(
+            height: 52,
+            width: double.infinity,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white, width: 1.8),
+            ),
+            child: const Text(
+              'Registrarse',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        0.72,
+        1.0,
+        offsetY: 40,
+      ),
+    ];
   }
 
   Widget _buildLogo() {

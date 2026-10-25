@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../legal/contenido_legal.dart';
 import '../widgets/encabezado_azul.dart';
+import '../widgets/responsivo.dart';
 
 class TermsView extends StatefulWidget {
   final int pestanaInicial;
@@ -40,43 +41,213 @@ class _TermsViewState extends State<TermsView> {
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
+  static const _etiquetas = ['Términos', 'Privacidad', 'Derechos ARCO'];
+  static const _iconos = [
+    Icons.description_outlined,
+    Icons.privacy_tip_outlined,
+    Icons.verified_user_outlined,
+  ];
+
+  List<Widget> get _contenido => switch (_tab) {
+        0 => _listaSecciones(terminos),
+        1 => _listaSecciones(avisoPrivacidad),
+        _ => _contenidoArco(),
+      };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          EncabezadoAzul(
-            title: 'Términos y privacidad',
-            subtitle: 'Versión ${LegalInfo.version} · ${LegalInfo.ultimaActualizacion}',
-            leading: EncabezadoAzul.boton(
-              icon: Icons.arrow_back_ios_new_rounded,
-              onTap: () => Navigator.maybePop(context),
-            ),
+      body: context.esHorizontal ? _vistaHorizontal() : _vistaVertical(),
+    );
+  }
+
+  Widget _vistaVertical() {
+    return Column(
+      children: [
+        EncabezadoAzul(
+          title: 'Términos y privacidad',
+          subtitle: 'Versión ${LegalInfo.version} · ${LegalInfo.ultimaActualizacion}',
+          leading: EncabezadoAzul.boton(
+            icon: Icons.arrow_back_ios_new_rounded,
+            onTap: () => Navigator.maybePop(context),
           ),
-          Padding(
+        ),
+        AnchoMaximo(
+          maximo: 760,
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: _selector(),
           ),
-          Expanded(
+        ),
+        Expanded(
+          child: ListView(
+            controller: _scroll,
+            padding: EdgeInsets.zero,
+            children: [
+              AnchoMaximo(
+                maximo: 760,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _contenido,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (widget.modoAceptar) _barraAceptar(),
+      ],
+    );
+  }
+
+  Widget _vistaHorizontal() {
+    final seguro = MediaQuery.paddingOf(context);
+    return Row(
+      children: [
+        _panelLateral(seguro),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0.03, 0), end: Offset.zero).animate(animation),
+                child: child,
+              ),
+            ),
             child: ListView(
-              controller: _scroll,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: switch (_tab) {
-                0 => _listaSecciones(terminos),
-                1 => _listaSecciones(avisoPrivacidad),
-                _ => _contenidoArco(),
-              },
+              key: ValueKey(_tab),
+              padding: EdgeInsets.fromLTRB(20, 16 + seguro.top, 20 + seguro.right, 20 + seguro.bottom),
+              children: [
+                AnchoMaximo(
+                  maximo: 760,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _etiquetas[_tab],
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _texto),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._contenido,
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          if (widget.modoAceptar) _barraAceptar(),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _panelLateral(EdgeInsets seguro) {
+    return Container(
+      width: 250 + seguro.left,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D47A1), Color(0xFF1D61E7), Color(0xFF1E88E5)],
+        ),
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(16 + seguro.left, 12 + seguro.top, 16, 16 + seguro.bottom),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 28 - seguro.top - seguro.bottom).clamp(0.0, double.infinity),
+            ),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      EncabezadoAzul.boton(
+                        icon: Icons.arrow_back_ios_new_rounded,
+                        onTap: () => Navigator.maybePop(context),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Términos y privacidad',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Versión ${LegalInfo.version} · ${LegalInfo.ultimaActualizacion}',
+                    style: const TextStyle(fontSize: 11.5, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 18),
+                  for (int i = 0; i < _etiquetas.length; i++) ...[
+                    _pestanaLateral(i),
+                    const SizedBox(height: 8),
+                  ],
+                  const Spacer(),
+                  if (widget.modoAceptar) ...[
+                    const SizedBox(height: 12),
+                    _botonAceptar(sobreAzul: true),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pestanaLateral(int i) {
+    final activo = i == _tab;
+    return GestureDetector(
+      onTap: () => _cambiarTab(i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: activo ? Colors.white : Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: activo ? 0 : 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(_iconos[i], size: 19, color: activo ? _azul : Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _etiquetas[i],
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: activo ? FontWeight.bold : FontWeight.w500,
+                  color: activo ? _azul : Colors.white,
+                ),
+              ),
+            ),
+            AnimatedOpacity(
+              opacity: activo ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: const Icon(Icons.chevron_right_rounded, size: 18, color: _azul),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _selector() {
-    const etiquetas = ['Términos', 'Privacidad', 'Derechos ARCO'];
+    const etiquetas = _etiquetas;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -296,29 +467,35 @@ class _TermsViewState extends State<TermsView> {
         color: Colors.white,
         border: Border(top: BorderSide(color: _borde)),
       ),
-      child: widget.yaAceptado
-          ? OutlinedButton(
-              onPressed: () => Navigator.pop(context, false),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                side: const BorderSide(color: _borde, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: const Text('Cancelar',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _gris)),
-            )
-          : ElevatedButton(
-        onPressed: () => Navigator.pop(context, true),
-        style: ElevatedButton.styleFrom(
+      child: AnchoMaximo(maximo: 760, child: _botonAceptar()),
+    );
+  }
+
+  Widget _botonAceptar({bool sobreAzul = false}) {
+    if (widget.yaAceptado) {
+      return OutlinedButton(
+        onPressed: () => Navigator.pop(context, false),
+        style: OutlinedButton.styleFrom(
           minimumSize: const Size(double.infinity, 50),
-          backgroundColor: _azul,
-          foregroundColor: Colors.white,
-          elevation: 0,
+          backgroundColor: sobreAzul ? Colors.white : null,
+          side: BorderSide(color: sobreAzul ? Colors.white : _borde, width: 1.5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        child: const Text('He leído y acepto',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        child: const Text('Cancelar',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _gris)),
+      );
+    }
+    return ElevatedButton(
+      onPressed: () => Navigator.pop(context, true),
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 50),
+        backgroundColor: sobreAzul ? Colors.white : _azul,
+        foregroundColor: sobreAzul ? _azul : Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      child: const Text('He leído y acepto',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
     );
   }
 }

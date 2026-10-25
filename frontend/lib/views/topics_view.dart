@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import './generation_view.dart';
 import '../widgets/encabezado_azul.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class TopicsView extends StatefulWidget {
   const TopicsView({super.key});
@@ -25,6 +27,7 @@ class _TopicsViewState extends State<TopicsView>
   String selectedTopicName = '';
   int selectedWeeks = 2;
   bool isFetchingTopics = true;
+  bool _errorTemas = false;
 
   List<dynamic> topicsFromDb = [];
 
@@ -67,6 +70,12 @@ class _TopicsViewState extends State<TopicsView>
 
   // 1. Cargar temas desde PostgreSQL
   Future<void> _loadTopicsFromBackend() async {
+    if (!isFetchingTopics || _errorTemas) {
+      setState(() {
+        isFetchingTopics = true;
+        _errorTemas = false;
+      });
+    }
     try {
       final fetchedTopics = await ApiService.getTopics();
       if (!mounted) return;
@@ -83,12 +92,13 @@ class _TopicsViewState extends State<TopicsView>
       if (!mounted) return;
       setState(() {
         isFetchingTopics = false;
+        _errorTemas = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al obtener los temas'),
-          backgroundColor: Colors.red,
-        ),
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'No se pudieron cargar los temas',
+        mensaje: ApiService.mensajeDe(e),
+        tipo: TipoAlerta.error,
       );
     }
   }
@@ -122,8 +132,11 @@ class _TopicsViewState extends State<TopicsView>
   // 2. Abrir la pantalla de generación con el tema y el tiempo elegidos
   Future<void> _generate() async {
     if (selectedTopicName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor selecciona un tema primero')),
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'Elige un tema',
+        mensaje: 'Por favor selecciona un tema primero.',
+        tipo: TipoAlerta.aviso,
       );
       return;
     }
@@ -146,6 +159,7 @@ class _TopicsViewState extends State<TopicsView>
 
   @override
   Widget build(BuildContext context) {
+    final horizontal = context.esHorizontal;
     return Scaffold(
       backgroundColor: _bg,
       body: Column(
@@ -171,12 +185,111 @@ class _TopicsViewState extends State<TopicsView>
                           padding: EdgeInsets.symmetric(vertical: 60),
                           child: CircularProgressIndicator(color: _primary),
                         )
-                      : _buildBody(),
+                      : _errorTemas && topicsFromDb.isEmpty
+                          ? _buildErrorTemas()
+                          : horizontal
+                              ? AnchoMaximo(maximo: 1100, child: _buildBodyHorizontal())
+                              : AnchoMaximo(maximo: 760, child: _buildBody()),
                 ],
               ),
             ),
           ),
-          SafeArea(top: false, child: _buildBottomButton()),
+          if (!horizontal || isFetchingTopics || (_errorTemas && topicsFromDb.isEmpty))
+            SafeArea(top: false, child: AnchoMaximo(maximo: 760, child: _buildBottomButton())),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorTemas() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEBF2FE),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: const Icon(Icons.cloud_off_rounded, color: _primary, size: 36),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No pudimos cargar los temas',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _text),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Revisa tu conexión e inténtalo de nuevo.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: _muted),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _loadTopicsFromBackend,
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            label: const Text('Reintentar', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBodyHorizontal() {
+    final seguro = MediaQuery.paddingOf(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20 + seguro.left, 20, 20 + seguro.right, 16 + seguro.bottom),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '¿Qué deseas aprender?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _text),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Selecciona el tema que más te interese',
+                  style: TextStyle(fontSize: 13, color: _muted),
+                ),
+                const SizedBox(height: 16),
+                _buildTopicsGrid(),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '¿En cuánto tiempo deseas terminarlo?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _text),
+                ),
+                const SizedBox(height: 14),
+                _buildDurationSelector(),
+                const SizedBox(height: 20),
+                _buildPlanSummary(),
+                const SizedBox(height: 20),
+                _buildBottomButton(conMargen: false),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -240,8 +353,8 @@ class _TopicsViewState extends State<TopicsView>
       shrinkWrap: true,
       padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 150,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         childAspectRatio: 0.95,
@@ -558,11 +671,11 @@ class _TopicsViewState extends State<TopicsView>
   }
 
   // ───────────────────────── Botón fijo inferior ─────────────────────────
-  Widget _buildBottomButton() {
+  Widget _buildBottomButton({bool conMargen = true}) {
     final enabled = !isFetchingTopics && selectedTopicName.isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      padding: conMargen ? const EdgeInsets.fromLTRB(20, 8, 20, 16) : EdgeInsets.zero,
       child: GestureDetector(
         onTapDown: enabled ? (_) => setState(() => _buttonPressed = true) : null,
         onTapUp: enabled ? (_) => setState(() => _buttonPressed = false) : null,

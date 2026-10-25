@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
@@ -7,6 +9,8 @@ import 'profile_view.dart';
 import 'study_view.dart';
 import '../widgets/foto_perfil.dart';
 import '../widgets/encabezado_azul.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class CoursesView extends StatefulWidget {
   const CoursesView({super.key});
@@ -41,6 +45,8 @@ class _CoursesViewState extends State<CoursesView> {
     return 'ul_bienvenida_vista_$id';
   }
 
+  OverlayEntry? _bannerBienvenida;
+
   Future<void> _mostrarBannerBienvenida() async {
     if (_hasWelcomed || !mounted) return;
     _hasWelcomed = true;
@@ -59,31 +65,26 @@ class _CoursesViewState extends State<CoursesView> {
     }
 
     // Muestra ÚNICAMENTE el banner flotante inferior de bienvenida por 3 segundos
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Text('👋', style: TextStyle(fontSize: 18)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '¡Todo listo para empezar, $_userName!',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E293B),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(20),
-        duration: const Duration(seconds: 3),
+    _bannerBienvenida?.remove();
+    final entrada = OverlayEntry(
+      builder: (_) => _BannerBienvenida(
+        nombre: _userName,
+        alTerminar: _quitarBanner,
       ),
     );
+    _bannerBienvenida = entrada;
+    Overlay.of(context).insert(entrada);
+  }
+
+  void _quitarBanner() {
+    _bannerBienvenida?.remove();
+    _bannerBienvenida = null;
+  }
+
+  @override
+  void dispose() {
+    _quitarBanner();
+    super.dispose();
   }
 
   void _mostrarDialogoBienvenida() {
@@ -93,99 +94,102 @@ class _CoursesViewState extends State<CoursesView> {
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEBF2FE),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.school_rounded,
-                      size: 36,
-                      color: Color(0xFF1D61E7),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEBF2FE),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  '¡Bienvenido a U-Learn, $_userName!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Aprende sobre temas financieros a tu ritmo con guías creadas por inteligencia artificial.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Center(
-                  child: IntrinsicWidth(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _welcomeFeature(
-                          Icons.auto_awesome_rounded,
-                          'Crea tu guía',
-                        ),
-                        const SizedBox(height: 14),
-                        _welcomeFeature(
-                          Icons.menu_book_rounded,
-                          'Estudia',
-                        ),
-                        const SizedBox(height: 14),
-                        _welcomeFeature(
-                          Icons.quiz_rounded,
-                          'Pon a prueba lo aprendido',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 26),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D61E7),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'Comenzar',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.school_rounded,
+                        size: 36,
+                        color: Color(0xFF1D61E7),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 18),
+                  Text(
+                    '¡Bienvenido a U-Learn, $_userName!',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Aprende sobre temas financieros a tu ritmo con guías creadas por inteligencia artificial.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Center(
+                    child: IntrinsicWidth(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _welcomeFeature(
+                            Icons.auto_awesome_rounded,
+                            'Crea tu guía',
+                          ),
+                          const SizedBox(height: 14),
+                          _welcomeFeature(
+                            Icons.menu_book_rounded,
+                            'Estudia',
+                          ),
+                          const SizedBox(height: 14),
+                          _welcomeFeature(
+                            Icons.quiz_rounded,
+                            'Pon a prueba lo aprendido',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 26),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D61E7),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Comenzar',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -233,25 +237,20 @@ class _CoursesViewState extends State<CoursesView> {
 
       if (mounted) {
         setState(() {
-          _courses = coursesData;
+          _courses = coursesData.where((c) => !_borrando.contains(_idDe(c))).toList();
           _isLoading = false;
         });
         _mostrarBannerBienvenida();
       }
     } catch (e) {
-      print('Error capturado en CoursesView: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _mostrarBannerBienvenida();
-        if (_courses.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No se pudieron obtener los cursos'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'No se pudieron cargar tus cursos',
+        mensaje: ApiService.mensajeDe(e),
+        tipo: TipoAlerta.error,
+      );
     }
   }
 
@@ -271,7 +270,7 @@ class _CoursesViewState extends State<CoursesView> {
             maxHeight: MediaQuery.of(context).size.height * 0.75,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: context.esHorizontal ? 12 : 24),
             child: ValueListenableBuilder<List<AppNotification>>(
               valueListenable: NotificationService.inbox,
               builder: (context, items, _) {
@@ -315,20 +314,24 @@ class _CoursesViewState extends State<CoursesView> {
                         ),
                       ],
                     ),
-                    const Divider(height: 24),
+                    Divider(height: context.esHorizontal ? 12 : 24),
                     if (items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.notifications_off_outlined, size: 40, color: Color(0xFF94A3B8)),
-                              SizedBox(height: 8),
-                              Text(
-                                'No tienes notificaciones',
-                                style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                      const Flexible(
+                        child: SingleChildScrollView(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(Icons.notifications_off_outlined, size: 40, color: Color(0xFF94A3B8)),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'No tienes notificaciones',
+                                    style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       )
@@ -420,6 +423,7 @@ class _CoursesViewState extends State<CoursesView> {
                 const SizedBox(height: 2),
                 Text(
                   body,
+                  textAlign: TextAlign.justify,
                   style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                 ),
                 if (time != null) ...[
@@ -456,6 +460,88 @@ class _CoursesViewState extends State<CoursesView> {
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
+  final Set<int> _borrando = {};
+
+  int? _idDe(dynamic course) {
+    final raw = course is Map ? (course['id_guia'] ?? course['id']) : null;
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+  }
+
+  Future<bool> _confirmarEliminar(int idGuia, String nombre) async {
+    if (_borrando.contains(idGuia)) return false;
+    final confirmado = await AlertaFlotante.confirmar(
+      context,
+      titulo: '¿Eliminar este curso?',
+      mensaje: 'Se borrará «$nombre» con todo tu avance y tus calificaciones. Esta acción no se puede deshacer.',
+      tipo: TipoAlerta.error,
+      icono: Icons.delete_outline_rounded,
+      textoConfirmar: 'Eliminar',
+      textoCancelar: 'Cancelar',
+      colorConfirmar: const Color(0xFFEF4444),
+    );
+    return confirmado && mounted;
+  }
+
+  Future<void> _eliminarConfirmado(int idGuia, String nombre) async {
+    final indice = _courses.indexWhere((c) => _idDe(c) == idGuia);
+    if (indice < 0 || !_borrando.add(idGuia)) return;
+    final curso = _courses[indice];
+
+    setState(() => _courses = [..._courses]..removeAt(indice));
+
+    final res = await ApiService.deleteGuide(idGuia);
+    _borrando.remove(idGuia);
+
+    if (res['success'] == true) {
+      NotificationService.showProgress(
+        'Curso eliminado 🗑️',
+        'Se eliminó «$nombre» junto con su avance y calificaciones.',
+      );
+      NotificationService.refreshReminder();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      final lista = [..._courses];
+      if (!lista.any((c) => _idDe(c) == idGuia)) {
+        lista.insert(indice.clamp(0, lista.length), curso);
+      }
+      _courses = lista;
+    });
+    AlertaFlotante.mostrar(
+      context,
+      titulo: 'No se pudo eliminar',
+      mensaje: res['message']?.toString() ?? 'No se pudo eliminar «$nombre». Inténtalo de nuevo.',
+      tipo: TipoAlerta.error,
+    );
+  }
+
+  Widget _fondoEliminar() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      alignment: Alignment.centerRight,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFCA5A5), Color(0xFFEF4444)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Eliminar',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          SizedBox(width: 8),
+          Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -472,111 +558,157 @@ class _CoursesViewState extends State<CoursesView> {
                   children: [
                     // 1. Cabecera Azul Superior (se desplaza junto con la lista)
                     _buildHeader(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text(
-                                    'Mis cursos',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                  if (_courses.isNotEmpty) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEBF2FE),
-                                        borderRadius: BorderRadius.circular(20),
+                    AnchoMaximo(
+                      maximo: 760,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Mis cursos',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A),
                                       ),
-                                      child: Text(
-                                        '${_courses.length}',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1D61E7),
+                                    ),
+                                    if (_courses.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEBF2FE),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          '${_courses.length}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF1D61E7),
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
-                                onPressed: _loadUserAndCourses,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
+                                  onPressed: _loadUserAndCourses,
+                                ),
+                              ],
+                            ),
+
+                            if (_courses.isNotEmpty && !_isLoading) ...[
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Desliza un curso a la izquierda o mantenlo presionado para eliminarlo.',
+                                textAlign: TextAlign.justify,
+                                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                               ),
                             ],
-                          ),
 
-                          const SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
-                          // Estado de Carga / Vacío / Lista de Cursos
-                          if (_isLoading)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: Center(
-                                child: CircularProgressIndicator(color: Color(0xFF2563EB)),
-                              ),
-                            )
-                          else if (_courses.isEmpty)
-                            _buildEmptyState()
-                          else
-                            ..._courses.map((course) {
-                              final int total = int.tryParse(course['total_secciones']?.toString() ?? '0') ?? 0;
-                              final int completadas = int.tryParse(course['secciones_completadas']?.toString() ?? '0') ?? 0;
+                            // Estado de Carga / Vacío / Lista de Cursos
+                            if (_isLoading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
+                                child: Center(
+                                  child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+                                ),
+                              )
+                            else if (_courses.isEmpty)
+                              _buildEmptyState()
+                            else
+                              ..._courses.map((course) {
+                                final int total = int.tryParse(course['total_secciones']?.toString() ?? '0') ?? 0;
+                                final int completadas = int.tryParse(course['secciones_completadas']?.toString() ?? '0') ?? 0;
 
-                              final double progress = total > 0 ? (completadas / total) : 0.0;
-                              final String progressPercentage = '${(progress * 100).toInt()}%';
-                              final bool isCompleted = progress >= 1.0 && total > 0;
-                              final String nombreTema =
-                                  (course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio').toString();
-                              final style = _getTopicStyle(nombreTema);
+                                final int totalExamenes = int.tryParse(course['total_examenes']?.toString() ?? '0') ?? 0;
+                                final int presentados = int.tryParse(course['examenes_presentados']?.toString() ?? '0') ?? 0;
+                                final int pasos = total + totalExamenes;
+                                final int hechos = completadas + presentados.clamp(0, totalExamenes);
 
-                              return _CourseCard(
-                                title: nombreTema,
-                                topicIcon: style['icon'] as IconData,
-                                topicColor: style['color'] as Color,
-                                progress: progress,
-                                progressText: progressPercentage,
-                                timeRemaining: total > 0 
-                                    ? '$completadas de $total secciones completadas'
-                                    : 'Sin secciones registradas',
-                                color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
-                                isCompleted: isCompleted,
-                                onTap: () async {
-                                  final rawId = course['id_guia'] ?? course['id'];
-                                  final int? idGuia = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+                                final double progress = pasos > 0 ? (hechos / pasos).clamp(0.0, 1.0) : 0.0;
+                                final String progressPercentage = '${(progress * 100).round()}%';
+                                final bool isCompleted = progress >= 1.0 && pasos > 0;
+                                final String nombreTema =
+                                    (course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio').toString();
+                                final style = _getTopicStyle(nombreTema);
+                                final rawIdGuia = course['id_guia'] ?? course['id'];
+                                final int? idGuiaCurso =
+                                    rawIdGuia is int ? rawIdGuia : int.tryParse(rawIdGuia?.toString() ?? '');
 
-                                  if (idGuia == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('No se pudo obtener el ID de la guía')),
+                                final tarjeta = _CourseCard(
+                                  title: nombreTema,
+                                  topicIcon: style['icon'] as IconData,
+                                  topicColor: style['color'] as Color,
+                                  progress: progress,
+                                  progressText: progressPercentage,
+                                  timeRemaining: total > 0
+                                      ? (totalExamenes > 0
+                                          ? '$completadas de $total secciones · $presentados de $totalExamenes exámenes'
+                                          : '$completadas de $total secciones completadas')
+                                      : 'Sin secciones registradas',
+                                  color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                                  isCompleted: isCompleted,
+                                  onTap: () async {
+                                    final rawId = course['id_guia'] ?? course['id'];
+                                    final int? idGuia = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+
+                                    if (idGuia == null) {
+                                      AlertaFlotante.mostrar(
+                                        context,
+                                        titulo: 'No se pudo abrir el curso',
+                                        mensaje: 'Actualiza la lista de cursos e inténtalo de nuevo.',
+                                        tipo: TipoAlerta.error,
+                                      );
+                                      return;
+                                    }
+
+                                    _quitarBanner();
+
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => StudyView(idGuia: idGuia),
+                                      ),
                                     );
-                                    return;
-                                  }
 
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => StudyView(idGuia: idGuia),
-                                    ),
-                                  );
+                                    _loadUserAndCourses();
+                                  },
+                                  onLongPress: idGuiaCurso == null
+                                      ? null
+                                      : () async {
+                                          if (await _confirmarEliminar(idGuiaCurso, nombreTema)) {
+                                            _eliminarConfirmado(idGuiaCurso, nombreTema);
+                                          }
+                                        },
+                                );
 
-                                  _loadUserAndCourses();
-                                },
-                              );
-                            }),
+                                if (idGuiaCurso == null) return tarjeta;
 
-                          const SizedBox(height: 20),
-                        ],
+                                return Dismissible(
+                                  key: ValueKey('guia_$idGuiaCurso'),
+                                  direction: DismissDirection.endToStart,
+                                  background: _fondoEliminar(),
+                                  resizeDuration: const Duration(milliseconds: 220),
+                                  confirmDismiss: (_) => _confirmarEliminar(idGuiaCurso, nombreTema),
+                                  onDismissed: (_) => _eliminarConfirmado(idGuiaCurso, nombreTema),
+                                  child: tarjeta,
+                                );
+                              }),
+
+                            const SizedBox(height: 96),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -584,25 +716,38 @@ class _CoursesViewState extends State<CoursesView> {
               ),
             ),
           ),
-
-          // 3. Botón "Agregar nuevo curso" fijo en la parte inferior
-          _buildAddCourseBar(),
         ],
       ),
+      // 3. Botón "Agregar nuevo curso" fijo en la parte inferior
+      floatingActionButton: _buildAddCourseBar(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
   // Barra inferior fija con el botón para agregar un curso (-> TopicsView)
   Widget _buildAddCourseBar() {
-    return Container(
-      // Mismo color que el fondo, sin sombra: no se nota división
-      color: const Color(0xFFF8FAFC),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: OutlinedButton(
-            onPressed: () async {
+    final ancho = MediaQuery.sizeOf(context).width / 2;
+    return SizedBox(
+      width: ancho,
+      height: 54,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 11, 13, 15),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1D61E7).withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () async {
+              _quitarBanner();
               await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -611,28 +756,28 @@ class _CoursesViewState extends State<CoursesView> {
               );
               _loadUserAndCourses();
             },
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              backgroundColor: Colors.white,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.add_rounded, color: Color(0xFF2563EB), size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Agregar nuevo curso',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2563EB),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                      SizedBox(width: 6),
+                      Text(
+                        'Nuevo curso',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -743,6 +888,7 @@ class _CoursesViewState extends State<CoursesView> {
           // Foto de perfil -> Navega a la vista de perfil
           GestureDetector(
             onTap: () async {
+              _quitarBanner();
               await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -794,6 +940,7 @@ class _CourseCard extends StatefulWidget {
   final Color color;
   final bool isCompleted;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   const _CourseCard({
     required this.title,
@@ -805,6 +952,7 @@ class _CourseCard extends StatefulWidget {
     required this.color,
     this.isCompleted = false,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -827,6 +975,12 @@ class _CourseCardState extends State<_CourseCard> {
       onTapUp: (_) => _setPressed(false),
       onTapCancel: () => _setPressed(false),
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () {
+              _setPressed(false);
+              widget.onLongPress!();
+            },
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 140),
@@ -950,11 +1104,15 @@ class _CourseCardState extends State<_CourseCard> {
                       children: [
                         const Icon(Icons.timer_outlined, size: 13, color: Color(0xFF94A3B8)),
                         const SizedBox(width: 4),
-                        Text(
-                          widget.timeRemaining,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF94A3B8),
+                        Expanded(
+                          child: Text(
+                            widget.timeRemaining,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                       ],
@@ -963,6 +1121,103 @@ class _CourseCardState extends State<_CourseCard> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+class _BannerBienvenida extends StatefulWidget {
+  final String nombre;
+  final VoidCallback alTerminar;
+
+  const _BannerBienvenida({required this.nombre, required this.alTerminar});
+
+  @override
+  State<_BannerBienvenida> createState() => _BannerBienvenidaState();
+}
+
+class _BannerBienvenidaState extends State<_BannerBienvenida> with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+    reverseDuration: const Duration(milliseconds: 260),
+  );
+  Timer? _temporizador;
+  bool _cerrando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim.forward();
+    _temporizador = Timer(const Duration(seconds: 3), _cerrar);
+  }
+
+  Future<void> _cerrar() async {
+    if (_cerrando) return;
+    _cerrando = true;
+    _temporizador?.cancel();
+    if (mounted) await _anim.reverse();
+    widget.alTerminar();
+  }
+
+  @override
+  void dispose() {
+    _temporizador?.cancel();
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inferior = MediaQuery.paddingOf(context).bottom;
+    final curva = CurvedAnimation(parent: _anim, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn);
+
+    return Positioned(
+      left: 20,
+      right: 20,
+      bottom: inferior + 16,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: FadeTransition(
+              opacity: _anim,
+              child: SlideTransition(
+                position: Tween(begin: const Offset(0, 0.6), end: Offset.zero).animate(curva),
+                child: Material(
+                  color: const Color(0xFF1E293B),
+                  elevation: 10,
+                  shadowColor: Colors.black45,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _cerrar,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          const Text('👋', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '¡Todo listo para empezar, ${widget.nombre}!',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

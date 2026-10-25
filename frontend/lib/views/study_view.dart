@@ -2,9 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/progreso_local_service.dart';
 import 'lesson_view.dart';
 import 'exam_view.dart';
 import '../widgets/encabezado_azul.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
+import '../widgets/componentes_guia.dart';
+import '../widgets/efectos_animados.dart';
 
 class StudyView extends StatefulWidget {
   final int idGuia;
@@ -30,8 +35,9 @@ class _StudyViewState extends State<StudyView>
   bool _isLoading = true;
   Map<String, dynamic>? _guia;
   List<dynamic> _secciones = [];
-  final Set<int> _expanded = {};
-  bool _expandedInit = false;
+  final Map<int, Set<int>> _vistos = {};
+  final Set<int> _abiertas = {};
+  bool _abiertasIniciadas = false;
 
   late final AnimationController _floatController;
 
@@ -80,88 +86,53 @@ class _StudyViewState extends State<StudyView>
     );
   }
 
-  Widget _pulseHalo(Widget child) {
-    return AnimatedBuilder(
-      animation: _floatController,
-      builder: (context, child) {
-        final v = (_floatController.value * 2) % 1.0;
-        return Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            Transform.scale(
-              scale: 1 + v * 0.4,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _primary.withValues(alpha: (1 - v) * 0.45),
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-            child!,
-          ],
-        );
-      },
-      child: child,
-    );
-  }
-
-  Widget _decorCircle(double size, double alpha) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: _primary.withValues(alpha: alpha),
-      ),
-    );
-  }
-
   Future<void> _fetchCourseDetails() async {
     setState(() => _isLoading = true);
 
-    try {
-      final res = await ApiService.getGuideDetails(widget.idGuia);
+    final res = await ApiService.getGuideDetails(widget.idGuia);
 
+    if (!mounted) return;
+
+    if (res['success'] == true) {
+      final secciones = List<dynamic>.from(res['data']?['secciones'] ?? []);
+      final vistos = await _leerVistos(secciones);
       if (!mounted) return;
-
-      if (res['success'] == true) {
-        setState(() {
-          _guia = res['data']?['guia'] as Map<String, dynamic>?;
-          _secciones = List<dynamic>.from(res['data']?['secciones'] ?? []);
-          _isLoading = false;
-          if (!_expandedInit) {
-            _expandedInit = true;
-            final next = _secciones.indexWhere((s) => s['completado'] != true);
-            _expanded.add(next >= 0 ? next : 0);
-          }
-        });
-      } else {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['message'] ?? 'Error al cargar el curso'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-
+      setState(() {
+        _guia = res['data']?['guia'] as Map<String, dynamic>?;
+        _secciones = secciones;
+        _vistos
+          ..clear()
+          ..addAll(vistos);
+        _isLoading = false;
+        if (!_abiertasIniciadas) {
+          _abiertasIniciadas = true;
+          final actual = _secciones.indexWhere((s) => s['completado'] != true);
+          _abiertas.add(actual >= 0 ? actual : 0);
+        }
+      });
+    } else {
       setState(() => _isLoading = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error de conexión: $e'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'No se pudo cargar tu guía',
+        mensaje: res['message']?.toString() ?? 'No pudimos abrir tu guía. Inténtalo de nuevo.',
+        tipo: TipoAlerta.error,
       );
     }
+  }
+
+  Future<Map<int, Set<int>>> _leerVistos(List<dynamic> secciones) async {
+    final mapa = <int, Set<int>>{};
+    for (final sec in secciones) {
+      final id = sec is Map ? sec['id_seccion'] : null;
+      if (id is int) mapa[id] = await ProgresoLocalService.vistos(id);
+    }
+    return mapa;
+  }
+
+  Set<int> _vistosDe(Map<String, dynamic> sec) {
+    final id = sec['id_seccion'];
+    return id is int ? (_vistos[id] ?? <int>{}) : <int>{};
   }
 
   List<Map<String, dynamic>> _lessonsOf(Map<String, dynamic> sec) {
@@ -189,6 +160,8 @@ class _StudyViewState extends State<StudyView>
           lessons: lessons,
           currentIndex: lessonIndex,
           tieneExamen: examen != null,
+          seccionCompletada: sec['completado'] == true,
+          nombreGuia: (_guia?['nombre_tema'] ?? '').toString(),
         ),
       ),
     );
@@ -207,7 +180,7 @@ class _StudyViewState extends State<StudyView>
         return;
       }
       await _openExam(fresh, sectionIndex, freshExam);
-    } else if (result != null) {
+    } else {
       _fetchCourseDetails();
     }
   }
@@ -218,7 +191,13 @@ class _StudyViewState extends State<StudyView>
       context,
       MaterialPageRoute(
         builder: (context) => ExamView(
-          examen: {...examen, 'titulo': 'Examen · Sección ${sectionIndex + 1}'},
+          examen: {
+            ...examen,
+            'titulo': 'Examen · Sección ${sectionIndex + 1}',
+            'numero_seccion': sectionIndex + 1,
+            'titulo_seccion': (sec['titulo'] ?? '').toString(),
+            'nombre_guia': (_guia?['nombre_tema'] ?? '').toString(),
+          },
           idSeccion: sec['id_seccion'],
         ),
       ),
@@ -231,7 +210,7 @@ class _StudyViewState extends State<StudyView>
 
   int _pct(dynamic v) => (num.tryParse(v?.toString() ?? '') ?? 0).round();
 
-  void _showRetakeDialog(Map<String, dynamic> sec, int sectionIndex, Map<String, dynamic> examen) {
+  Future<void> _showRetakeDialog(Map<String, dynamic> sec, int sectionIndex, Map<String, dynamic> examen) async {
     final intentos = Map<String, dynamic>.from(examen['intentos'] as Map);
     final int ultima = _pct(intentos['ultima_calificacion']);
     final int mejor = _pct(intentos['mejor_calificacion']);
@@ -239,164 +218,600 @@ class _StudyViewState extends State<StudyView>
     final bool aprobado = ultima >= _notaAprobatoria;
     final Color color = aprobado ? _success : const Color(0xFFF59E0B);
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: Colors.white,
-          contentPadding: const EdgeInsets.all(24),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                aprobado ? Icons.emoji_events_rounded : Icons.stars_rounded,
-                color: aprobado ? const Color(0xFFEAB308) : const Color(0xFF94A3B8),
-                size: 48,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Ya presentaste este examen',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _text),
-              ),
-              const SizedBox(height: 16),
-              const Text('Tu última calificación', style: TextStyle(fontSize: 13, color: _muted)),
-              const SizedBox(height: 4),
-              Text(
-                '$ultima%',
-                style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: color),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                total > 1
-                    ? 'Mejor calificación: $mejor% · $total intentos'
-                    : '1 intento realizado',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: _muted),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                '¿Quieres volver a hacer el examen?',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: _text, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: const BorderSide(color: _border),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text(
-                        'No',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _muted),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        _openExam(sec, sectionIndex, examen);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _exam,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text(
-                        'Sí, repetir',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    final repetir = await AlertaFlotante.confirmar(
+      context,
+      titulo: 'Ya presentaste este examen',
+      icono: aprobado ? Icons.emoji_events_rounded : Icons.stars_rounded,
+      colorIcono: aprobado ? const Color(0xFFEAB308) : const Color(0xFF94A3B8),
+      fondoIcono: aprobado ? const Color(0xFFFEF9C3) : const Color(0xFFF1F5F9),
+      tipo: TipoAlerta.info,
+      textoConfirmar: 'Sí, repetir',
+      textoCancelar: 'No',
+      colorConfirmar: _exam,
+      botonesEnFila: true,
+      contenido: Column(
+        children: [
+          const Text('Tu última calificación', style: TextStyle(fontSize: 13, color: _muted)),
+          const SizedBox(height: 4),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: ultima.toDouble()),
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeOutCubic,
+            builder: (context, valor, _) => Text(
+              '${valor.round()}%',
+              style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: color),
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 8),
+          Text(
+            total > 1
+                ? 'Mejor calificación: $mejor% · $total intentos'
+                : '1 intento realizado',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: _muted),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '¿Quieres volver a hacer el examen?',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: _text, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
+
+    if (repetir && mounted) _openExam(sec, sectionIndex, examen);
   }
 
   void _showLockedDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          contentPadding: const EdgeInsets.all(24),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+    AlertaFlotante.mostrar(
+      context,
+      titulo: 'Sección bloqueada',
+      mensaje: 'Debes completar todas las lecciones de esta sección para desbloquear el examen.',
+      tipo: TipoAlerta.aviso,
+      icono: Icons.lock_clock_rounded,
+      textoBoton: 'Continuar',
+      cerrarAlTocarFuera: true,
+    );
+  }
+
+  int get _seccionesCompletadas => _secciones.where((s) => s is Map && s['completado'] == true).length;
+
+  int get _examenesPresentados => _secciones
+      .where((s) => s is Map && s['examen'] is Map && (s['examen'] as Map)['intentos'] is Map)
+      .length;
+
+  int get _examenesTotales => _secciones.where((s) => s is Map && s['examen'] is Map).length;
+
+  int get _temasVistos {
+    int total = 0;
+    for (final s in _secciones) {
+      if (s is! Map) continue;
+      final cantidad = (s['contenidos'] as List?)?.length ?? 0;
+      if (s['completado'] == true) {
+        total += cantidad;
+      } else {
+        total += _vistosDe(Map<String, dynamic>.from(s)).where((v) => v < cantidad).length;
+      }
+    }
+    return total;
+  }
+
+  int get _temasTotales => _secciones.fold<int>(
+        0,
+        (suma, s) => suma + (s is Map ? ((s['contenidos'] as List?)?.length ?? 0) : 0),
+      );
+
+  Widget _chip(IconData icono, String texto) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _primary.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icono, size: 14, color: _primary),
+          const SizedBox(width: 6),
+          Text(texto, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF334155))),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarjetaProgreso(String titulo, String descripcion) {
+    final total = _secciones.length;
+    final hechas = _seccionesCompletadas;
+    final pasos = total + _examenesTotales;
+    final progreso = pasos == 0 ? 0.0 : ((hechas + _examenesPresentados) / pasos).clamp(0.0, 1.0);
+
+    return Container(
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: _primary.withValues(alpha: 0.22), width: 1.5),
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(color: _primary.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+      ),
+      child: BrilloDeslizante(
+        borderRadius: BorderRadius.circular(26),
+        intensidad: 0.14,
+        periodo: const Duration(milliseconds: 4500),
+        child: Container(
+          decoration: const BoxDecoration(color: Color(0xFFEBF2FE)),
+          child: Stack(
             children: [
-              // Icono de advertencia llamativo
-              const Icon(
-                Icons.lock_clock_rounded,
-                color: Color(0xFFF59E0B),
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-
-              // Título de la alerta
-              const Text(
-                'Sección bloqueada',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _text,
+              const Positioned.fill(child: IgnorePointer(child: _FondoAnimado(color: _primary))),
+              Positioned(
+                top: 14,
+                right: 18,
+                child: Flotante(
+                  amplitud: 5,
+                  rotacion: 0.12,
+                  child: Icon(Icons.savings_rounded, size: 40, color: _primary.withValues(alpha: 0.10)),
                 ),
               ),
-              const SizedBox(height: 10),
-
-              // Mensaje exacto
-              const Text(
-                'Debes completar todas las lecciones de esta sección para desbloquear el examen.',
-                textAlign: TextAlign.justify,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _muted,
-                  height: 1.4,
+              Positioned(
+                bottom: 60,
+                right: 70,
+                child: Flotante(
+                  amplitud: 4,
+                  fase: 2,
+                  child: Icon(Icons.trending_up_rounded, size: 26, color: _primary.withValues(alpha: 0.08)),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Botón de Continuar
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flotante(
+                          amplitud: 3,
+                          escala: 0.05,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(17),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _primary.withValues(alpha: 0.12),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(IconosFinanzas.para(titulo, 0), color: _primary, size: 28),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                titulo,
+                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _text),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                descripcion,
+                                textAlign: TextAlign.justify,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF334155),
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: const Text(
-                    'Continuar',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Text(
+                          '${(progreso * 100).round()}%',
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: _primary),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0, end: progreso),
+                              duration: const Duration(milliseconds: 900),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, valor, _) => LinearProgressIndicator(
+                                value: valor,
+                                minHeight: 9,
+                                color: _primary,
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _chip(Icons.layers_rounded, '$hechas/$total secciones'),
+                        _chip(Icons.menu_book_rounded, '$_temasVistos/$_temasTotales temas'),
+                        _chip(Icons.emoji_events_rounded, '$_examenesPresentados/$_examenesTotales exámenes'),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  void _tocarExamen(Map<String, dynamic> sec, int sectionIndex, Map<String, dynamic> examen) {
+    if (sec['completado'] != true) {
+      _showLockedDialog();
+      return;
+    }
+    if (examen['intentos'] is Map) {
+      _showRetakeDialog(sec, sectionIndex, examen);
+      return;
+    }
+    _openExam(sec, sectionIndex, examen);
+  }
+
+  ({int seccion, int tema})? get _siguientePaso {
+    for (int i = 0; i < _secciones.length; i++) {
+      final s = _secciones[i];
+      if (s is! Map || s['completado'] == true) continue;
+      final sec = Map<String, dynamic>.from(s);
+      final total = (sec['contenidos'] as List?)?.length ?? 0;
+      if (total == 0) continue;
+      final p = ProgresoLocalService.primerPendiente(_vistosDe(sec), total);
+      return (seccion: i, tema: p >= 0 ? p : total - 1);
+    }
+    return null;
+  }
+
+  Widget _tarjetaContinuar() {
+    final paso = _siguientePaso;
+    if (paso == null) return const SizedBox.shrink();
+    final sec = Map<String, dynamic>.from(_secciones[paso.seccion] as Map);
+    final contenidos = sec['contenidos'] as List<dynamic>? ?? [];
+    final tema = (contenidos[paso.tema]['titulo'] ?? 'Tema ${paso.tema + 1}').toString();
+
+    return _PressScale(
+      onTap: () => _openLesson(sec, paso.seccion, paso.tema),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _primary.withValues(alpha: 0.25), width: 1.4),
+          boxShadow: [
+            BoxShadow(color: _primary.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [_primary, _exam]),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CONTINÚA DONDE TE QUEDASTE',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                      color: _primary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    tema,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _text, height: 1.25),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Sección ${paso.seccion + 1} · Tema ${paso.tema + 1} de ${contenidos.length}',
+                    style: const TextStyle(fontSize: 12, color: _muted),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _anilloSeccion({required double progreso, required bool completada, required bool actual, required int numero}) {
+    final color = completada ? _success : (actual ? _primary : const Color(0xFF94A3B8));
+    return SizedBox(
+      width: 50,
+      height: 50,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: progreso),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutCubic,
+            builder: (context, valor, _) => SizedBox(
+              width: 50,
+              height: 50,
+              child: CircularProgressIndicator(
+                value: valor,
+                strokeWidth: 4,
+                strokeCap: StrokeCap.round,
+                color: color,
+                backgroundColor: color.withValues(alpha: 0.14),
+              ),
+            ),
+          ),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: completada ? _success : (actual ? _primary : const Color(0xFFF1F5F9)),
+            ),
+            alignment: Alignment.center,
+            child: completada
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                : Text(
+                    '$numero',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: actual ? Colors.white : const Color(0xFF64748B),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _estadoChip(bool completada, bool actual) {
+    final (texto, color) = completada
+        ? ('Completada', _success)
+        : actual
+            ? ('En curso', _primary)
+            : ('Pendiente', const Color(0xFF94A3B8));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color),
+      ),
+    );
+  }
+
+  Widget _tarjetaModulo(Map<String, dynamic> sec, int indice) {
+    final contenidos = sec['contenidos'] as List<dynamic>? ?? [];
+    final examen = sec['examen'] as Map<String, dynamic>?;
+    final completada = sec['completado'] == true;
+    final actual = indice == _currentSectionIndex;
+    final abierta = _abiertas.contains(indice);
+    final vistos = _vistosDe(sec);
+    final cuantos = completada ? contenidos.length : vistos.where((v) => v < contenidos.length).length;
+    final progreso = contenidos.isEmpty ? 0.0 : cuantos / contenidos.length;
+    final pendiente = ProgresoLocalService.primerPendiente(vistos, contenidos.length);
+    final intentos = examen != null && examen['intentos'] is Map ? examen['intentos'] as Map : null;
+    final Color acento = completada ? _success : _primary;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: actual ? _primary.withValues(alpha: 0.45) : (abierta ? acento.withValues(alpha: 0.25) : _border),
+          width: actual ? 1.6 : 1.1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (actual ? _primary : Colors.black).withValues(alpha: actual ? 0.12 : 0.04),
+            blurRadius: actual ? 20 : 10,
+            offset: Offset(0, actual ? 8 : 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: () => setState(() {
+              if (abierta) {
+                _abiertas.remove(indice);
+              } else {
+                _abiertas.add(indice);
+              }
+            }),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+              child: Row(
+                children: [
+                  _anilloSeccion(progreso: progreso, completada: completada, actual: actual, numero: indice + 1),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'SECCIÓN ${indice + 1}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1,
+                                color: completada || actual ? acento : _muted,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _estadoChip(completada, actual),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          (sec['titulo'] ?? '').toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: _text, height: 1.25),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.menu_book_rounded, size: 14, color: _muted),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$cuantos/${contenidos.length} temas',
+                              style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
+                            ),
+                            if (examen != null) ...[
+                              const SizedBox(width: 12),
+                              Icon(
+                                intentos != null ? Icons.emoji_events_rounded : Icons.quiz_outlined,
+                                size: 14,
+                                color: intentos != null ? const Color(0xFFF59E0B) : _muted,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                intentos != null
+                                    ? 'Examen ${_pct(intentos['ultima_calificacion'])}%'
+                                    : (completada ? 'Examen listo' : 'Examen'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: intentos != null ? const Color(0xFFB45309) : _muted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: abierta ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ClipRect(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: !abierta
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+                      child: Column(
+                        children: [
+                          const Divider(height: 1, color: _border),
+                          const SizedBox(height: 12),
+                          ...contenidos.asMap().entries.map((e) => _buildLessonItem(
+                                title: (e.value['titulo'] ?? 'Tema ${e.key + 1}').toString(),
+                                isCompleted: completada,
+                                visto: vistos.contains(e.key),
+                                lessonNumber: e.key + 1,
+                                showConnector: e.key < contenidos.length - 1 || examen != null,
+                                onTap: () => _openLesson(sec, indice, e.key),
+                              )),
+                          if (examen != null)
+                            _buildExamItem(
+                              examen: examen,
+                              isUnlocked: completada,
+                              onTap: () => _tocarExamen(sec, indice, examen),
+                            ),
+                          if (!completada && contenidos.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _PressScale(
+                              onTap: () => _openLesson(sec, indice, pendiente >= 0 ? pendiente : contenidos.length - 1),
+                              child: Container(
+                                height: 48,
+                                width: double.infinity,
+                                clipBehavior: Clip.antiAlias,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [_primary, _exam]),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(color: _primary.withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0, 5)),
+                                  ],
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(child: _shimmer()),
+                                    Center(
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            cuantos == 0 ? 'Comenzar sección' : 'Continuar sección',
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -443,119 +858,47 @@ class _StudyViewState extends State<StudyView>
                     onTap: () => Navigator.popUntil(context, (route) => route.isFirst),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 24),
+                AnchoMaximo(
+                  maximo: 760,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
 
-                      // 2. Tarjeta Informativa del Curso
-                      Container(
-                        width: double.infinity,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEBF2FE),
-                          borderRadius: BorderRadius.circular(20),
+                        // 2. Tarjeta Informativa del Curso
+                        Aparecer(orden: 0, child: _tarjetaProgreso(title, description)),
+
+                        const SizedBox(height: 28),
+
+                        if (_siguientePaso != null) ...[
+                          Aparecer(orden: 1, child: _tarjetaContinuar()),
+                          const SizedBox(height: 28),
+                        ],
+
+                        const EtiquetaSeccion(icono: Icons.route_rounded, texto: 'Ruta de aprendizaje'),
+                        const SizedBox(height: 4),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 38),
+                          child: Text(
+                            'Toca una sección para ver sus temas y su examen.',
+                            textAlign: TextAlign.justify,
+                            style: TextStyle(fontSize: 13, color: _muted),
+                          ),
                         ),
-                        child: Stack(
-                          children: [
-                            Positioned(top: -30, right: -20, child: _decorCircle(110, 0.07)),
-                            Positioned(bottom: -40, right: 50, child: _decorCircle(80, 0.05)),
-                            Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AnimatedBuilder(
-                                    animation: _floatController,
-                                    builder: (context, child) {
-                                      final a = _floatController.value * 2 * math.pi;
-                                      return Transform.translate(
-                                        offset: Offset(0, math.sin(a) * 2.5),
-                                        child: child,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: _primary.withValues(alpha: 0.12),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(
-                                        Icons.school_rounded,
-                                        color: _primary,
-                                        size: 28,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          title,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: _text,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          description,
-                                          textAlign: TextAlign.justify,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            color: Color(0xFF334155),
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                        const SizedBox(height: 16),
 
-                      const SizedBox(height: 28),
+                        // 3. Renderizado de Secciones, Lecciones y Examen Final de Sección
+                        for (int i = 0; i < _secciones.length; i++)
+                          Aparecer(
+                            orden: i + 2,
+                            child: _tarjetaModulo(Map<String, dynamic>.from(_secciones[i] as Map), i),
+                          ),
 
-                      const Text(
-                        'Ruta de aprendizaje',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: _text,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Estudia los temas de cada sección y presenta su examen.',
-                        style: TextStyle(fontSize: 13, color: _muted),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // 3. Renderizado de Secciones, Lecciones y Examen Final de Sección
-                      ..._secciones.asMap().entries.map((entry) {
-                        return _buildSectionCard(
-                          Map<String, dynamic>.from(entry.value as Map),
-                          entry.key,
-                        );
-                      }),
-
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -566,220 +909,27 @@ class _StudyViewState extends State<StudyView>
     );
   }
 
-  Widget _buildSectionCard(Map<String, dynamic> sec, int sectionIndex) {
-    final contenidos = sec['contenidos'] as List<dynamic>? ?? [];
-    final examen = sec['examen'] as Map<String, dynamic>?;
-    final bool isSectionCompleted = sec['completado'] == true;
-    final bool isExpanded = _expanded.contains(sectionIndex);
-    final Color accent = isSectionCompleted ? _success : _primary;
-    final bool isCurrent = sectionIndex == _currentSectionIndex;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: isSectionCompleted ? const Color(0xFFF0FDF7) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isExpanded ? accent.withValues(alpha: 0.35) : _border,
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isExpanded ? 0.05 : 0.02),
-            blurRadius: isExpanded ? 14 : 8,
-            offset: Offset(0, isExpanded ? 6 : 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => setState(() {
-              if (isExpanded) {
-                _expanded.remove(sectionIndex);
-              } else {
-                _expanded.add(sectionIndex);
-              }
-            }),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  _maybeHalo(
-                    isCurrent,
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: isExpanded && !isSectionCompleted
-                            ? _primary
-                            : accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: isSectionCompleted
-                            ? const Icon(Icons.check_rounded, color: _success, size: 24)
-                            : Text(
-                                '${sectionIndex + 1}',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: isExpanded ? Colors.white : _primary,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'SECCIÓN ${sectionIndex + 1}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.1,
-                            color: accent,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          sec['titulo'] ?? '',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.bold,
-                            color: _text,
-                            height: 1.25,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 250),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          ClipRect(
-            child: AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: !isExpanded
-                  ? const SizedBox(width: double.infinity)
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Column(
-                        children: [
-                          const Divider(height: 1, color: _border),
-                          const SizedBox(height: 12),
-                          ...contenidos.asMap().entries.map((cEntry) {
-                            final int cIndex = cEntry.key;
-                            final cont = cEntry.value;
-                            return _buildLessonItem(
-                              title: cont['titulo'] ?? 'Tema ${cIndex + 1}',
-                              isCompleted: isSectionCompleted,
-                              lessonNumber: cIndex + 1,
-                              showConnector: cIndex < contenidos.length - 1 || examen != null,
-                              onTap: () => _openLesson(sec, sectionIndex, cIndex),
-                            );
-                          }),
-                          // Tarjeta del Examen al final de la Sección
-                          if (examen != null)
-                            _buildExamItem(
-                              examen: examen,
-                              isUnlocked: isSectionCompleted,
-                              onTap: () {
-                                if (!isSectionCompleted) {
-                                  _showLockedDialog();
-                                  return;
-                                }
-                                if (examen['intentos'] is Map) {
-                                  _showRetakeDialog(sec, sectionIndex, examen);
-                                  return;
-                                }
-                                _openExam(sec, sectionIndex, examen);
-                              },
-                            ),
-                          if (!isSectionCompleted && contenidos.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            _PressScale(
-                              onTap: () => _openLesson(sec, sectionIndex, 0),
-                              child: Container(
-                                height: 48,
-                                width: double.infinity,
-                                clipBehavior: Clip.antiAlias,
-                                decoration: BoxDecoration(
-                                  color: _primary,
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _primary.withValues(alpha: 0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(child: _shimmer()),
-                                    const Center(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.play_arrow_rounded, color: Colors.white),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            'Comenzar sección',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _maybeHalo(bool active, Widget child) => active ? _pulseHalo(child) : child;
-
   // Widget para renderizar cada Lección
   Widget _buildLessonItem({
     required String title,
     bool isCompleted = false,
+    bool visto = false,
     int? lessonNumber,
     bool showConnector = true,
     required VoidCallback onTap,
   }) {
+    final Color colorCirculo = isCompleted || visto ? _success : _primary;
+    final Widget contenidoCirculo = isCompleted || visto
+        ? const Icon(Icons.check_rounded, color: Colors.white, size: 15)
+        : Text(
+            '$lessonNumber',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: _primary,
+            ),
+          );
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -789,28 +939,24 @@ class _StudyViewState extends State<StudyView>
             child: Column(
               children: [
                 const SizedBox(height: 12),
-                Container(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
                   width: 26,
                   height: 26,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isCompleted ? _success : Colors.white,
-                    border: Border.all(
-                      color: isCompleted ? _success : _primary,
-                      width: 2,
-                    ),
+                    color: isCompleted || visto ? colorCirculo : Colors.white,
+                    border: Border.all(color: colorCirculo, width: 2),
                   ),
                   child: Center(
-                    child: isCompleted
-                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 15)
-                        : Text(
-                            '$lessonNumber',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: _primary,
-                            ),
-                          ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                      child: KeyedSubtree(
+                        key: ValueKey('${isCompleted}_$visto'),
+                        child: contenidoCirculo,
+                      ),
+                    ),
                   ),
                 ),
                 if (showConnector)
@@ -831,7 +977,8 @@ class _StudyViewState extends State<StudyView>
               padding: const EdgeInsets.only(bottom: 10),
               child: _PressScale(
                 onTap: onTap,
-                child: Container(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -1011,4 +1158,80 @@ class _PressScaleState extends State<_PressScale> {
       ),
     );
   }
+}
+class _FondoAnimado extends StatefulWidget {
+  final Color color;
+
+  const _FondoAnimado({required this.color});
+
+  @override
+  State<_FondoAnimado> createState() => _FondoAnimadoState();
+}
+
+class _FondoAnimadoState extends State<_FondoAnimado> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 14),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _PintorFondo(_c, widget.color),
+      ),
+    );
+  }
+}
+
+class _PintorFondo extends CustomPainter {
+  final Animation<double> t;
+  final Color color;
+
+  _PintorFondo(this.t, this.color) : super(repaint: t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final a = t.value * 2 * math.pi;
+
+    final burbujas = [
+      (x: 0.88, y: 0.12, r: 0.42, dx: 0.06, dy: 0.08, fase: 0.0, alfa: 0.10),
+      (x: 0.10, y: 0.95, r: 0.36, dx: 0.08, dy: 0.05, fase: 2.1, alfa: 0.08),
+      (x: 0.55, y: 0.70, r: 0.22, dx: 0.10, dy: 0.07, fase: 4.0, alfa: 0.07),
+      (x: 0.30, y: 0.15, r: 0.16, dx: 0.07, dy: 0.06, fase: 1.2, alfa: 0.06),
+    ];
+
+    for (final b in burbujas) {
+      final centro = Offset(
+        size.width * (b.x + math.sin(a + b.fase) * b.dx),
+        size.height * (b.y + math.cos(a * 1.3 + b.fase) * b.dy),
+      );
+      final radio = size.shortestSide * b.r * (1 + 0.06 * math.sin(a * 2 + b.fase));
+      final pintura = Paint()
+        ..shader = RadialGradient(
+          colors: [color.withValues(alpha: b.alfa), color.withValues(alpha: 0)],
+        ).createShader(Rect.fromCircle(center: centro, radius: radio));
+      canvas.drawCircle(centro, radio, pintura);
+    }
+
+    final onda = Path();
+    final base = size.height * 0.86;
+    onda.moveTo(0, size.height);
+    for (double x = 0; x <= size.width; x += 6) {
+      final y = base + math.sin((x / size.width) * 2 * math.pi + a) * 7 + math.sin((x / size.width) * 4 * math.pi - a * 2) * 3;
+      onda.lineTo(x, y);
+    }
+    onda.lineTo(size.width, size.height);
+    onda.close();
+    canvas.drawPath(onda, Paint()..color = color.withValues(alpha: 0.05));
+  }
+
+  @override
+  bool shouldRepaint(covariant _PintorFondo old) => old.color != color;
 }

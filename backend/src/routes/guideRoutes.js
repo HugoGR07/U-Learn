@@ -20,4 +20,6 @@ router.post('/complete-section', authMiddleware, guideController.completeSection
 
 router.post('/start-section', authMiddleware, guideController.startSection);
 
+router.delete('/:id_guia', authMiddleware, guideController.deleteGuide);
+
 module.exports = router;

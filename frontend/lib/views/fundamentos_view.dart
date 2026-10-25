@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/encabezado_azul.dart';
 import '../widgets/efectos_animados.dart';
+import '../widgets/responsivo.dart';
 
 class FundamentosView extends StatefulWidget {
   final List<Map<String, dynamic>> errores;
@@ -96,14 +97,12 @@ class _FundamentosViewState extends State<FundamentosView>
       });
     } catch (e) {
       if (!mounted) return;
-      final String msg = e.toString();
       setState(() {
         _cargando = false;
-        _error = msg.contains('TimeoutException')
-            ? 'El tutor tardó demasiado en responder. Inténtalo de nuevo.'
-            : msg.contains('límite')
-                ? msg.replaceFirst('Exception: ', '')
-                : 'No pudimos conectar con el tutor de IA. Revisa tu conexión e inténtalo de nuevo.';
+        _error = ApiService.mensajeDe(
+          e,
+          porDefecto: 'No pudimos conectar con el tutor de IA. Inténtalo de nuevo.',
+        );
       });
     } finally {
       _timerMensajes?.cancel();
@@ -120,7 +119,7 @@ class _FundamentosViewState extends State<FundamentosView>
       .trim();
 
   Widget _buildCargando() {
-    return Center(
+    return CentradoDesplazable(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
@@ -210,7 +209,7 @@ class _FundamentosViewState extends State<FundamentosView>
   }
 
   Widget _buildError() {
-    return Center(
+    return CentradoDesplazable(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
@@ -552,45 +551,49 @@ class _FundamentosViewState extends State<FundamentosView>
       physics: const BouncingScrollPhysics(),
       children: [
         _encabezado(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Explicación por pregunta',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _text),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Lee por qué fallaste y la idea clave a recordar.',
-                style: TextStyle(fontSize: 13, color: _muted),
-              ),
-              const SizedBox(height: 16),
-              if (items.isNotEmpty)
-                ...items.asMap().entries.map((e) => _tarjetaFundamento(e.key, e.value))
-              else
-                ..._contenidoTextoPlano(),
-              const SizedBox(height: 8),
-              BrilloDeslizante(
-                borderRadius: BorderRadius.circular(16),
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.check_circle_rounded, size: 20),
-                  label: const Text(
-                    '¡Entendido!',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 52),
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        AnchoMaximo(
+          maximo: 760,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Explicación por pregunta',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _text),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Lee por qué fallaste y la idea clave a recordar.',
+                textAlign: TextAlign.justify,
+                  style: TextStyle(fontSize: 13, color: _muted),
+                ),
+                const SizedBox(height: 16),
+                if (items.isNotEmpty)
+                  ...items.asMap().entries.map((e) => _tarjetaFundamento(e.key, e.value))
+                else
+                  ..._contenidoTextoPlano(),
+                const SizedBox(height: 8),
+                BrilloDeslizante(
+                  borderRadius: BorderRadius.circular(16),
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.check_circle_rounded, size: 20),
+                    label: const Text(
+                      '¡Entendido!',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 52),
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],

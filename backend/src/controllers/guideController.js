@@ -1,24 +1,37 @@
 const db = require('../config/db');
-const { GoogleGenAI, Type, ThinkingLevel } = require('@google/genai');
-
-// Inicializar cliente de Google Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY });
-
-const MODELOS = [
-  'models/gemini-3.5-flash',
-  'models/gemini-3.6-flash',
-  'models/gemini-3.7-flash'
-];
+const { Type } = require('@google/genai');
+const {
+  generarJSON,
+  IANoDisponibleError,
+  MENSAJE_IA_SATURADA,
+  ThinkingLevel,
+} = require('../services/geminiService');
 
 const SECCIONES_POR_SEMANA = 3;
 const TEMAS_POR_SECCION = 3;
 const CONCEPTOS_POR_TEMA = 3;
+const BLOQUES_DESARROLLO = 3;
 const PREGUNTAS_POR_EXAMEN = 10;
 const MINUTOS_POR_EXAMEN = 15;
 const INCISOS = ['A', 'B', 'C', 'D'];
 const INTENTOS_POR_SECCION = 2;
-const TIMEOUT_MODELO_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '120000', 10);
 const CONCURRENCIA = parseInt(process.env.GEMINI_CONCURRENCIA || '12', 10);
+const PRESUPUESTO_TOTAL_MS = parseInt(process.env.GEMINI_PRESUPUESTO_TOTAL_MS || '280000', 10);
+const restanteHasta = (fin) => Math.max(fin - Date.now(), 0);
+const INTENTOS_POR_PARTE = parseInt(process.env.GEMINI_INTENTOS_PARTE || '3', 10);
+
+const nivelThinking = (valor, defecto) => {
+  const v = String(valor || '').trim().toUpperCase();
+  if (!v) return defecto;
+  if (['NONE', 'NO', 'OFF', '0'].includes(v)) return null;
+  return ThinkingLevel[v] || defecto;
+};
+
+const THINKING_ESTRUCTURA = nivelThinking(process.env.GEMINI_THINKING_ESTRUCTURA, ThinkingLevel.LOW);
+const THINKING_CONTENIDO = nivelThinking(process.env.GEMINI_THINKING_CONTENIDO, ThinkingLevel.LOW);
+const THINKING_EXAMEN = nivelThinking(process.env.GEMINI_THINKING_EXAMEN, ThinkingLevel.MINIMAL);
+
+const generandoPorUsuario = new Set();
 
 const obtenerPlan = (semanas) => {
   const n = Math.min(Math.max(parseInt(semanas, 10) || 1, 1), 4);
@@ -46,6 +59,15 @@ const mapConcurrente = async (items, limite, fn) => {
 const estructuraSchema = {
   type: Type.OBJECT,
   properties: {
+    hilo_conductor: {
+      type: Type.OBJECT,
+      properties: {
+        pregunta_central: { type: Type.STRING },
+        meta: { type: Type.STRING },
+        datos_base: { type: Type.STRING },
+      },
+      required: ['pregunta_central', 'meta', 'datos_base'],
+    },
     secciones: {
       type: Type.ARRAY,
       items: {
@@ -53,16 +75,18 @@ const estructuraSchema = {
         properties: {
           titulo_seccion: { type: Type.STRING },
           objetivo: { type: Type.STRING },
+          conexion: { type: Type.STRING },
+          aporte: { type: Type.STRING },
           temas: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ['titulo_seccion', 'objetivo', 'temas'],
+        required: ['titulo_seccion', 'objetivo', 'conexion', 'aporte', 'temas'],
       },
     },
   },
-  required: ['secciones'],
+  required: ['hilo_conductor', 'secciones'],
 };
 
-const seccionSchema = {
+const temasSchema = {
   type: Type.OBJECT,
   properties: {
     temas: {
@@ -71,7 +95,19 @@ const seccionSchema = {
         type: Type.OBJECT,
         properties: {
           titulo: { type: Type.STRING },
+          conexion_previa: { type: Type.STRING },
           introduccion: { type: Type.STRING },
+          desarrollo: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                subtitulo: { type: Type.STRING },
+                texto: { type: Type.STRING },
+              },
+              required: ['subtitulo', 'texto'],
+            },
+          },
           conceptos: {
             type: Type.ARRAY,
             items: {
@@ -86,10 +122,28 @@ const seccionSchema = {
           ejemplo: { type: Type.STRING },
           consejo: { type: Type.STRING },
           resumen: { type: Type.STRING },
+          puente_siguiente: { type: Type.STRING },
         },
-        required: ['titulo', 'introduccion', 'conceptos', 'ejemplo', 'consejo', 'resumen'],
+        required: [
+          'titulo',
+          'conexion_previa',
+          'introduccion',
+          'desarrollo',
+          'conceptos',
+          'ejemplo',
+          'consejo',
+          'resumen',
+          'puente_siguiente',
+        ],
       },
     },
+  },
+  required: ['temas'],
+};
+
+const examenSchema = {
+  type: Type.OBJECT,
+  properties: {
     preguntas: {
       type: Type.ARRAY,
       items: {
@@ -113,42 +167,7 @@ const seccionSchema = {
       },
     },
   },
-  required: ['temas', 'preguntas'],
-};
-
-const llamarModelo = (modelName, prompt, schema, conThinking) =>
-  ai.models.generateContent({
-    model: modelName,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: schema,
-      abortSignal: AbortSignal.timeout(TIMEOUT_MODELO_MS),
-      ...(conThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
-    },
-  });
-
-const generarJSON = async (prompt, schema) => {
-  let lastError = null;
-  for (const modelName of MODELOS) {
-    for (const conThinking of [true, false]) {
-      try {
-        const inicio = Date.now();
-        const response = await llamarModelo(modelName, prompt, schema, conThinking);
-        if (response && response.text) {
-          console.log(`${modelName} respondió en ${Date.now() - inicio} ms`);
-          return JSON.parse(response.text);
-        }
-        break;
-      } catch (err) {
-        lastError = err;
-        const invalido = err.status === 400 || /thinking/i.test(err.message || '');
-        console.warn(`Falló el modelo ${modelName} (${err.status || err.name || err.message}). Probando el siguiente...`);
-        if (!(conThinking && invalido)) break;
-      }
-    }
-  }
-  throw lastError || new Error('No se pudo conectar con ningún modelo de Gemini.');
+  required: ['preguntas'],
 };
 
 const limpiarTexto = (valor) => (typeof valor === 'string' ? valor.trim() : '');
@@ -179,7 +198,7 @@ const normalizarPregunta = (preg) => {
   return { pregunta: enunciado, opciones, respuesta_correcta: correcta };
 };
 
-const normalizarTema = (tema, plan) => {
+const normalizarTema = (tema, plan, contexto = {}) => {
   const titulo = limpiarTexto(tema && tema.titulo);
   const introduccion = limpiarTexto(tema && tema.introduccion);
   if (!titulo || !introduccion) return null;
@@ -189,98 +208,271 @@ const normalizarTema = (tema, plan) => {
     .filter((c) => c.titulo && c.explicacion)
     .slice(0, plan.conceptos);
 
+  const desarrollo = (Array.isArray(tema.desarrollo) ? tema.desarrollo : [])
+    .map((b) => ({ subtitulo: limpiarTexto(b && b.subtitulo), texto: limpiarTexto(b && b.texto) }))
+    .filter((b) => b.texto)
+    .slice(0, BLOQUES_DESARROLLO);
+
   return {
     titulo,
     contenido: {
-      version: 2,
+      version: 4,
+      conexion_seccion: contexto.esPrimero ? contexto.conexionSeccion || '' : '',
+      conexion_previa: limpiarTexto(tema.conexion_previa),
       introduccion,
+      desarrollo,
       conceptos,
       ejemplo: limpiarTexto(tema.ejemplo),
       consejo: limpiarTexto(tema.consejo),
       resumen: limpiarTexto(tema.resumen),
+      puente_siguiente: limpiarTexto(tema.puente_siguiente),
     },
   };
 };
 
-const generarEstructura = async (tema, nivel, plan) => {
+const normalizarHilo = (hilo) => ({
+  pregunta_central: limpiarTexto(hilo && hilo.pregunta_central),
+  meta: limpiarTexto(hilo && hilo.meta),
+  datos_base: limpiarTexto(hilo && hilo.datos_base),
+});
+
+const describirHilo = (hilo) =>
+  hilo && hilo.pregunta_central
+    ? `Pregunta central que responde el curso: ${hilo.pregunta_central}
+Lo que el estudiante sabrá hacer al final: ${hilo.meta}
+Cifras de ejemplo hipotéticas para ilustrar (reutilízalas con estos mismos valores): ${hilo.datos_base}`
+    : 'Usa cifras de referencia coherentes y constantes en todos los ejemplos de la sección.';
+
+const generarEstructura = async (tema, nivel, plan, fin) => {
   const prompt = `Eres un experto educador en finanzas personales y diseñador instruccional.
 Diseña el temario de un curso sobre "${tema}" para nivel "${nivel}", con duración de ${plan.semanas} semana(s) (${SECCIONES_POR_SEMANA} secciones por semana).
 
+El curso debe sentirse como UN solo recorrido de aprendizaje, no como temas sueltos. No uses personajes ni nombres de personas.
+
 Reglas OBLIGATORIAS:
-1. Exactamente ${plan.secciones} secciones progresivas (de lo básico a lo avanzado), sin repetir contenido entre ellas.
-2. Cada sección tiene exactamente ${plan.temas} temas con títulos cortos y específicos (máximo 8 palabras).
-3. "objetivo" es una sola oración que dice qué podrá hacer el estudiante al terminar la sección.
-4. Todo en español neutro.`;
+1. "hilo_conductor": "pregunta_central" es la gran pregunta práctica que el curso responde; "meta" es lo que el estudiante sabrá hacer al final; "datos_base" son cifras de referencia en pesos mexicanos (por ejemplo un ingreso mensual, gastos principales, deuda o ahorro, según aplique) que se reutilizarán como ejemplo hipotético en todo el curso.
+2. Exactamente ${plan.secciones} secciones progresivas: cada sección se apoya en lo aprendido en la anterior y prepara la siguiente. Nada se repite.
+3. "conexion": una oración que explique cómo esta sección retoma lo aprendido en la sección anterior (en la primera sección, por qué es el punto de partida para responder la pregunta central).
+4. "aporte": una oración sobre qué parte de la pregunta central resuelve esta sección.
+5. Cada sección tiene exactamente ${plan.temas} temas con títulos cortos y específicos (máximo 8 palabras), ordenados para que cada tema necesite el anterior.
+6. "objetivo" es una sola oración que dice qué podrá hacer el estudiante al terminar la sección.
+7. Todo en español neutro.`;
 
   for (let intento = 1; intento <= INTENTOS_POR_SECCION; intento++) {
-    const data = await generarJSON(prompt, estructuraSchema);
+    const data = await generarJSON(prompt, estructuraSchema, {
+      etiqueta: 'estructura',
+      thinking: THINKING_ESTRUCTURA,
+      presupuestoMs: restanteHasta(fin),
+    });
     const secciones = (Array.isArray(data && data.secciones) ? data.secciones : [])
       .map((s) => ({
         titulo: limpiarTexto(s && s.titulo_seccion),
         objetivo: limpiarTexto(s && s.objetivo),
+        conexion: limpiarTexto(s && s.conexion),
+        aporte: limpiarTexto(s && s.aporte),
         temas: (Array.isArray(s && s.temas) ? s.temas : []).map(limpiarTexto).filter(Boolean).slice(0, plan.temas),
       }))
       .filter((s) => s.titulo && s.temas.length === plan.temas)
       .slice(0, plan.secciones);
 
-    if (secciones.length === plan.secciones) return secciones;
+    if (secciones.length === plan.secciones) {
+      return { hilo: normalizarHilo(data && data.hilo_conductor), secciones };
+    }
     console.warn(`Estructura incompleta (intento ${intento}): ${secciones.length}/${plan.secciones} secciones válidas`);
   }
-  throw new Error('Gemini no devolvió una estructura de curso válida.');
+  throw new Error('La estructura del curso llegó incompleta.');
 };
 
-const generarSeccion = async (tema, nivel, plan, seccion, indice, todas) => {
-  const temario = todas.map((s, i) => `${i + 1}. ${s.titulo}`).join('\n');
-  const prompt = `Eres un experto educador en finanzas personales y diseñador instruccional.
+const contextoSeccion = (tema, nivel, plan, seccion, indice, todas, hilo) => {
+  const temario = todas
+    .map((s, i) => `${i + 1}. ${s.titulo}: ${s.temas.join(' / ')}${s.aporte ? ` (aporta: ${s.aporte})` : ''}`)
+    .join('\n');
+  const anterior = indice > 0 ? todas[indice - 1] : null;
+  const siguiente = indice < todas.length - 1 ? todas[indice + 1] : null;
+
+  return `Eres un experto educador en finanzas personales y diseñador instruccional.
 Curso: "${tema}" | Nivel: "${nivel}" | Duración: ${plan.semanas} semana(s).
 
-Temario completo del curso (solo como contexto, no repitas otras secciones):
+HILO CONDUCTOR DEL CURSO:
+${describirHilo(hilo)}
+
+Temario completo del curso (contexto; no desarrolles otras secciones):
 ${temario}
 
-Desarrolla ÚNICAMENTE la sección ${indice + 1}: "${seccion.titulo}".
+${anterior ? `Sección anterior (${indice}): "${anterior.titulo}", con los temas: ${anterior.temas.join(', ')}. El estudiante YA domina eso.` : 'Esta es la PRIMERA sección: parte desde cero y plantea la pregunta central del curso.'}
+${siguiente ? `Sección siguiente (${indice + 2}): "${siguiente.titulo}". Deja preparado el terreno para ella.` : 'Esta es la ÚLTIMA sección: cierra el recorrido respondiendo la pregunta central con todo lo aprendido.'}
+
+Sección actual ${indice + 1}: "${seccion.titulo}".
 Objetivo de la sección: ${seccion.objetivo}
+${seccion.conexion ? `Cómo se conecta con lo anterior: ${seccion.conexion}` : ''}
+${seccion.aporte ? `Qué parte de la pregunta central resuelve: ${seccion.aporte}` : ''}
 
-Temas a desarrollar, en este orden exacto:
-${seccion.temas.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+Temas de la sección, en este orden:
+${seccion.temas.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+};
 
-Reglas OBLIGATORIAS para "temas" (exactamente ${plan.temas}, uno por cada tema listado y con el mismo título):
-- "introduccion": un párrafo de 2 a 4 oraciones que explique de qué trata el tema y por qué importa.
-- "conceptos": exactamente ${plan.conceptos} conceptos clave; cada uno con un "titulo" corto y una "explicacion" de 1 a 2 oraciones.
-- "ejemplo": un caso práctico concreto con cifras en pesos mexicanos (MXN), de 2 a 3 oraciones.
+const normalizarClave = (texto) =>
+  limpiarTexto(texto)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const generarTemasSeccion = async (base, plan, seccion, indice, fin) => {
+  const obtenidos = new Array(plan.temas).fill(null);
+
+  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
+    const faltantes = obtenidos.map((t, i) => (t ? -1 : i)).filter((i) => i >= 0);
+    if (!faltantes.length) break;
+
+    const prompt = `${base}
+
+Desarrolla ÚNICAMENTE estos temas de la sección (exactamente ${faltantes.length}, con el mismo título y en este orden):
+${faltantes.map((i) => `${i + 1}. ${seccion.temas[i]}`).join('\n')}
+
+COHERENCIA (lo más importante):
+- Los temas de la sección forman una secuencia: cada uno usa lo que se explicó en el tema anterior y lo menciona de forma natural.
+- Los conceptos de un tema se relacionan entre sí: el segundo y el tercero se apoyan explícitamente en el primero.
+- Todos los ejemplos usan las MISMAS cifras de referencia y continúan el cálculo del tema anterior; si una cifra cambia, explica por qué.
+- No uses personajes ni nombres propios: habla en segunda persona ("si tu ingreso es...") o de forma impersonal.
+- Las cifras son HIPOTÉTICAS: preséntalas siempre como ejemplo ("por ejemplo, si ganaras $X al mes...", "imagina que...", "supongamos que..."), nunca como datos reales, promedios oficiales ni como la situación del estudiante.
+- Escribe SIEMPRE las cifras con números y signo, nunca con letra: "$18,000 MXN", "$2,500", "15%" (no "dieciocho mil pesos" ni "quince por ciento").
+
+Reglas OBLIGATORIAS para cada tema:
+- "conexion_previa": una oración que conecte el tema con lo que el estudiante acaba de ver (en el tema 1, con la sección anterior o, si es la primera sección, con la pregunta central del curso).
+- "introduccion": un párrafo de 2 a 3 oraciones: de qué trata, por qué importa y cómo ayuda a responder la pregunta central.
+- "desarrollo": exactamente ${BLOQUES_DESARROLLO} bloques que explican el tema como lo haría un buen maestro, con contexto y sin relleno. Cada bloque tiene un "subtitulo" corto (máximo 5 palabras) y un "texto" de 2 a 3 oraciones:
+   1) Qué es: define el tema de forma sencilla (por ejemplo: "Los impuestos son aportaciones obligatorias que...").
+   2) Cómo se compone o qué tipos hay: explica sus partes o variantes (por ejemplo: "Dentro de ellos están...", "Se divide en...").
+   3) Cómo funciona en la vida real: cuándo aparece, cómo te afecta y qué decisión cambia (puede usar las cifras de referencia).
+   Los bloques van en ese orden y cada uno se apoya en el anterior. No repitas la introducción ni los conceptos al pie de la letra.
+- "conceptos": exactamente ${plan.conceptos} conceptos clave, cada uno con "titulo" corto y "explicacion" de 1 a 2 oraciones, encadenados entre sí.
+- "ejemplo": de 2 a 4 oraciones que empiecen como caso hipotético ("Supongamos que...", "Imagina que...") con las cifras de referencia en pesos mexicanos (MXN), aplicando los conceptos del tema.
 - "consejo": una recomendación accionable de una oración.
-- "resumen": una oración que sintetice lo más importante.
-- Lenguaje claro y directo. Texto plano, sin Markdown, sin asteriscos ni viñetas.
+- "resumen": una oración que sintetice lo más importante y cómo se suma a lo anterior.
+- "puente_siguiente": una oración sobre qué queda abierto y que resuelve el siguiente tema (en el último tema, lo que viene en la siguiente sección o el examen).
+- Lenguaje claro y directo. Texto plano, sin Markdown, sin asteriscos ni viñetas.`;
 
-Reglas OBLIGATORIAS para "preguntas" (examen de esta sección):
-- Exactamente ${PREGUNTAS_POR_EXAMEN} preguntas de opción múltiple que evalúen SOLO los temas de esta sección.
+    try {
+      const data = await generarJSON(prompt, temasSchema, {
+        etiqueta: `temas sección ${indice + 1}`,
+        thinking: THINKING_CONTENIDO,
+        presupuestoMs: restanteHasta(fin),
+      });
+      const recibidos = Array.isArray(data && data.temas) ? data.temas : [];
+      const libres = [...faltantes];
+
+      recibidos.forEach((t, k) => {
+        const clave = normalizarClave(t && t.titulo);
+        let destino = libres.find((i) => normalizarClave(seccion.temas[i]) === clave);
+        if (destino === undefined && recibidos.length === faltantes.length) destino = faltantes[k];
+        if (destino === undefined || !libres.includes(destino)) return;
+        const normal = normalizarTema({ ...t, titulo: seccion.temas[destino] }, plan, {
+          esPrimero: destino === 0,
+          conexionSeccion: seccion.conexion,
+        });
+        if (normal && normal.contenido.conceptos.length && normal.contenido.desarrollo.length) {
+          obtenidos[destino] = normal;
+          libres.splice(libres.indexOf(destino), 1);
+        }
+      });
+
+      if (libres.length) {
+        console.warn(`Temas incompletos en sección ${indice + 1} (intento ${intento}): faltan ${libres.length}`);
+      }
+    } catch (err) {
+      if (err instanceof IANoDisponibleError) throw err;
+      console.warn(`Error generando temas de la sección ${indice + 1} (intento ${intento}): ${err.message}`);
+    }
+  }
+
+  if (obtenidos.some((t) => !t)) {
+    throw new Error(`No se pudieron completar los temas de la sección ${indice + 1}.`);
+  }
+  return obtenidos;
+};
+
+const resumirContenido = (temas) =>
+  temas
+    .map((t, i) => {
+      const c = t.contenido;
+      const conceptos = c.conceptos.map((x) => `   - ${x.titulo}: ${x.explicacion}`).join('\n');
+      return `Tema ${i + 1}: ${t.titulo}
+  Idea principal: ${c.introduccion}
+  Contenido:
+${(c.desarrollo || []).map((b) => `   - ${b.subtitulo}: ${b.texto}`).join('\n')}
+  Conceptos:
+${conceptos}
+  Ejemplo: ${c.ejemplo}
+  Resumen: ${c.resumen}`;
+    })
+    .join('\n\n');
+
+const generarExamenSeccion = async (base, seccion, indice, temas, fin) => {
+  const contenido = resumirContenido(temas);
+
+  const preguntas = [];
+  const vistas = new Set();
+
+  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
+    const faltan = PREGUNTAS_POR_EXAMEN - preguntas.length;
+    if (faltan <= 0) break;
+
+    const prompt = `${base}
+
+CONTENIDO QUE EL ESTUDIANTE ACABA DE ESTUDIAR (el examen debe basarse ÚNICAMENTE en esto):
+${contenido}
+
+Crea ${faltan} preguntas de opción múltiple para el examen de esta sección.
+${preguntas.length ? `Ya existen estas preguntas, NO las repitas:\n${preguntas.map((p) => `- ${p.pregunta}`).join('\n')}` : ''}
+
+Reglas OBLIGATORIAS:
+- Pregunta SOLO sobre conceptos, definiciones y cálculos que aparecen en el contenido de arriba. Si algo no está explicado ahí, no lo preguntes.
+- Usa los mismos nombres de conceptos y las mismas cifras de los ejemplos; si haces un cálculo nuevo, que se resuelva con lo explicado.
+- Reparte las preguntas entre los ${temas.length} temas; al menos ${Math.min(4, faltan)} son casos prácticos con las cifras de los ejemplos y al menos ${Math.min(2, faltan)} combinan conceptos de temas distintos.
+- La respuesta correcta debe poder justificarse con una frase del contenido.
 - Cada pregunta con exactamente 4 opciones con incisos "A", "B", "C" y "D", en ese orden.
 - "respuesta_correcta" es SOLO la letra del inciso correcto ("A", "B", "C" o "D").
 - Solo una opción correcta por pregunta; distractores plausibles; reparte la respuesta correcta entre los cuatro incisos.
-- Enunciados y opciones breves. Mezcla preguntas de comprensión, aplicación con cifras y análisis de casos.`;
+- Enunciados y opciones breves. Sin personajes ni nombres propios. Texto plano, sin Markdown.`;
 
-  for (let intento = 1; intento <= INTENTOS_POR_SECCION; intento++) {
     try {
-      const data = await generarJSON(prompt, seccionSchema);
-      const temas = (Array.isArray(data && data.temas) ? data.temas : [])
-        .map((t) => normalizarTema(t, plan))
-        .filter(Boolean)
-        .slice(0, plan.temas);
-      const preguntas = (Array.isArray(data && data.preguntas) ? data.preguntas : [])
+      const data = await generarJSON(prompt, examenSchema, {
+        etiqueta: `examen sección ${indice + 1}`,
+        thinking: THINKING_EXAMEN,
+        presupuestoMs: restanteHasta(fin),
+      });
+      (Array.isArray(data && data.preguntas) ? data.preguntas : [])
         .map(normalizarPregunta)
         .filter(Boolean)
-        .slice(0, PREGUNTAS_POR_EXAMEN);
-
-      if (temas.length === plan.temas && preguntas.length === PREGUNTAS_POR_EXAMEN) {
-        return { ...seccion, temas, preguntas };
+        .forEach((p) => {
+          const clave = normalizarClave(p.pregunta);
+          if (preguntas.length < PREGUNTAS_POR_EXAMEN && !vistas.has(clave)) {
+            vistas.add(clave);
+            preguntas.push(p);
+          }
+        });
+      if (preguntas.length < PREGUNTAS_POR_EXAMEN) {
+        console.warn(`Examen incompleto en sección ${indice + 1} (intento ${intento}): ${preguntas.length}/${PREGUNTAS_POR_EXAMEN}`);
       }
-      console.warn(
-        `Sección ${indice + 1} incompleta (intento ${intento}): ${temas.length}/${plan.temas} temas, ${preguntas.length}/${PREGUNTAS_POR_EXAMEN} preguntas`
-      );
     } catch (err) {
-      console.warn(`Error generando la sección ${indice + 1} (intento ${intento}): ${err.message}`);
+      if (err instanceof IANoDisponibleError) throw err;
+      console.warn(`Error generando el examen de la sección ${indice + 1} (intento ${intento}): ${err.message}`);
     }
   }
-  throw new Error(`No se pudo generar la sección ${indice + 1} con ${PREGUNTAS_POR_EXAMEN} preguntas.`);
+
+  if (preguntas.length < PREGUNTAS_POR_EXAMEN) {
+    throw new Error(`No se pudo completar el examen de la sección ${indice + 1}.`);
+  }
+  return preguntas;
+};
+
+const generarSeccion = async (tema, nivel, plan, seccion, indice, todas, hilo, fin) => {
+  const base = contextoSeccion(tema, nivel, plan, seccion, indice, todas, hilo);
+  const temas = await generarTemasSeccion(base, plan, seccion, indice, fin);
+  const preguntas = await generarExamenSeccion(base, seccion, indice, temas, fin);
+  return { ...seccion, temas, preguntas };
 };
 
 const guardarCurso = async (id_usuario, idTema, secciones) => {
@@ -372,6 +564,13 @@ exports.generateCourse = async (req, res) => {
     return res.status(400).json({ message: 'El tema es requerido para generar la guía.' });
   }
 
+  if (generandoPorUsuario.has(id_usuario)) {
+    return res.status(409).json({
+      message: 'Ya estamos generando una guía para ti. Espera a que termine antes de crear otra.',
+    });
+  }
+  generandoPorUsuario.add(id_usuario);
+
   try {
     // A. Buscar o crear el id_tema según el nombre en la BD
     const temaQuery = await db.query(
@@ -394,10 +593,11 @@ exports.generateCourse = async (req, res) => {
     const plan = obtenerPlan(duracion_semanas);
 
     const inicio = Date.now();
-    const estructura = await generarEstructura(tema, nivelCurso, plan);
+    const fin = inicio + PRESUPUESTO_TOTAL_MS;
+    const { hilo, secciones: estructura } = await generarEstructura(tema, nivelCurso, plan, fin);
 
     const secciones = await mapConcurrente(estructura, CONCURRENCIA, (sec, i) =>
-      generarSeccion(tema, nivelCurso, plan, sec, i, estructura)
+      generarSeccion(tema, nivelCurso, plan, sec, i, estructura, hilo, fin)
     );
 
     const idGuia = await guardarCurso(id_usuario, idTema, secciones);
@@ -422,7 +622,12 @@ exports.generateCourse = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al generar el curso con Gemini:', error);
-    res.status(500).json({ message: 'Error interno al generar la guía con Gemini' });
+    if (error instanceof IANoDisponibleError) {
+      return res.status(503).json({ message: MENSAJE_IA_SATURADA });
+    }
+    res.status(500).json({ message: 'No se pudo generar tu guía en este momento. Inténtalo de nuevo en unos minutos.' });
+  } finally {
+    generandoPorUsuario.delete(id_usuario);
   }
 };
 
@@ -465,7 +670,22 @@ exports.getUserGuides = async (req, res) => {
             AND NOT EXISTS (
               SELECT 1 FROM intento_examen i
               WHERE i.id_examen = e.id_examen AND i.id_usuario = $1)
-        ), 0) AS examenes_pendientes
+        ), 0) AS examenes_pendientes,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM seccion s
+          JOIN examen e ON e.id_seccion = s.id_seccion
+          WHERE s.id_guia = g.id_guia
+        ), 0) AS total_examenes,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM seccion s
+          JOIN examen e ON e.id_seccion = s.id_seccion
+          WHERE s.id_guia = g.id_guia
+            AND EXISTS (
+              SELECT 1 FROM intento_examen i
+              WHERE i.id_examen = e.id_examen AND i.id_usuario = $1)
+        ), 0) AS examenes_presentados
        FROM guia_estudio g
        INNER JOIN tema t ON g.id_tema = t.id_tema
        WHERE g.id_usuario = $1
@@ -643,5 +863,53 @@ exports.startSection = async (req, res) => {
   } catch (error) {
     console.error('Error al registrar inicio de sección:', error);
     res.status(500).json({ message: 'Error interno al registrar inicio' });
+  }
+};
+exports.deleteGuide = async (req, res) => {
+  const idGuia = parseInt(req.params.id_guia, 10);
+  const id_usuario = req.user.id_usuario;
+
+  if (!Number.isInteger(idGuia)) {
+    return res.status(400).json({ message: 'Guía no válida.' });
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const propia = await client.query(
+      'SELECT id_guia FROM guia_estudio WHERE id_guia = $1 AND id_usuario = $2 FOR UPDATE',
+      [idGuia, id_usuario]
+    );
+    if (propia.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'La guía no existe o ya fue eliminada.' });
+    }
+
+    const secciones = `SELECT id_seccion FROM seccion WHERE id_guia = $1`;
+    const examenes = `SELECT id_examen FROM examen WHERE id_seccion IN (${secciones})`;
+
+    await client.query(
+      `DELETE FROM respuesta_usuario
+       WHERE id_intento IN (SELECT id_intento FROM intento_examen WHERE id_examen IN (${examenes}))
+          OR id_pregunta IN (SELECT id_pregunta FROM pregunta WHERE id_examen IN (${examenes}))`,
+      [idGuia]
+    );
+    await client.query(`DELETE FROM intento_examen WHERE id_examen IN (${examenes})`, [idGuia]);
+    await client.query(`DELETE FROM pregunta WHERE id_examen IN (${examenes})`, [idGuia]);
+    await client.query(`DELETE FROM examen WHERE id_seccion IN (${secciones})`, [idGuia]);
+    await client.query(`DELETE FROM contenido_seccion WHERE id_seccion IN (${secciones})`, [idGuia]);
+    await client.query(`DELETE FROM avance_seccion WHERE id_seccion IN (${secciones})`, [idGuia]);
+    await client.query('DELETE FROM seccion WHERE id_guia = $1', [idGuia]);
+    await client.query('DELETE FROM guia_estudio WHERE id_guia = $1 AND id_usuario = $2', [idGuia, id_usuario]);
+
+    await client.query('COMMIT');
+    res.json({ message: 'Guía eliminada correctamente.' });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error al eliminar la guía:', error);
+    res.status(500).json({ message: 'No se pudo eliminar la guía. Inténtalo de nuevo.' });
+  } finally {
+    client.release();
   }
 };

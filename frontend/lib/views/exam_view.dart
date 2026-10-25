@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'result_view.dart';
 import '../services/notification_service.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
+import '../widgets/componentes_guia.dart';
+import '../widgets/efectos_animados.dart';
 
 class ExamView extends StatefulWidget {
   final Map<String, dynamic> examen;
@@ -30,6 +34,47 @@ class _ExamViewState extends State<ExamView> {
 
   final List<String> _letras = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+  static const Color _primary = Color(0xFF1D61E7);
+  static const Color _exam = Color(0xFF4F46E5);
+  static const Color _text = Color(0xFF1E293B);
+  static const Color _muted = Color(0xFF64748B);
+
+  bool _haciaAdelante = true;
+
+  int get _maxDisponible {
+    int i = 0;
+    while (i < _preguntas.length - 1 && _respuestasUsuario.containsKey(i)) {
+      i++;
+    }
+    return i;
+  }
+
+  void _irA(int indice) {
+    if (indice == _currentQuestionIndex || indice > _maxDisponible) return;
+    setState(() {
+      _haciaAdelante = indice > _currentQuestionIndex;
+      _currentQuestionIndex = indice;
+    });
+  }
+
+  Future<void> _salir() async {
+    if (_respuestasUsuario.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+    final salir = await AlertaFlotante.confirmar(
+      context,
+      titulo: '¿Salir del examen?',
+      mensaje: 'Las respuestas de este intento no se guardarán.',
+      tipo: TipoAlerta.aviso,
+      icono: Icons.logout_rounded,
+      textoConfirmar: 'Salir',
+      textoCancelar: 'Seguir respondiendo',
+      colorConfirmar: const Color(0xFFF59E0B),
+    );
+    if (salir && mounted) Navigator.pop(context);
+  }
+
   void _onOptionSelected(int optionIndex) {
     setState(() {
       _respuestasUsuario[_currentQuestionIndex] = optionIndex;
@@ -39,6 +84,7 @@ class _ExamViewState extends State<ExamView> {
   void _nextQuestion() {
     if (_currentQuestionIndex < _preguntas.length - 1) {
       setState(() {
+        _haciaAdelante = true;
         _currentQuestionIndex++;
       });
     } else {
@@ -49,10 +95,11 @@ class _ExamViewState extends State<ExamView> {
   void _previousQuestion() {
     if (_currentQuestionIndex > 0) {
       setState(() {
+        _haciaAdelante = false;
         _currentQuestionIndex--;
       });
     } else {
-      Navigator.maybePop(context);
+      _salir();
     }
   }
 
@@ -192,13 +239,6 @@ class _ExamViewState extends State<ExamView> {
       }
 
       if (res['success'] == true || res['resultado'] != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Examen completado con éxito!'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-
         final Map<String, dynamic> resultado = 
             (res['resultado'] is Map<String, dynamic>) 
                 ? res['resultado'] 
@@ -211,9 +251,22 @@ class _ExamViewState extends State<ExamView> {
         final num califRaw = resultado['calificacion'] ?? ((buenas / total) * 100);
         final int pct = califRaw.round();
 
+        final numSeccion = widget.examen['numero_seccion'];
+        final tituloSeccion = (widget.examen['titulo_seccion'] ?? '').toString().trim();
+        final nombreGuia = (widget.examen['nombre_guia'] ?? '').toString().trim();
+        final cual = [
+          if (numSeccion != null) 'Sección $numSeccion',
+          if (tituloSeccion.isNotEmpty) '«$tituloSeccion»',
+        ].join(' ');
+        final donde = [
+          if (cual.isNotEmpty) cual,
+          if (nombreGuia.isNotEmpty) 'de «$nombreGuia»',
+        ].join(' ');
+        final aprobado = pct >= 60;
         NotificationService.showProgress(
-          '¡Examen completado! ✅',
-          'Acertaste $buenas/$total preguntas ($pct%).',
+          aprobado ? '¡Aprobaste el examen! 🏆' : 'Examen terminado 📝',
+          '${donde.isEmpty ? 'Examen' : donde}: acertaste $buenas de $total preguntas ($pct%).'
+          '${aprobado ? '' : ' Repasa los temas y vuelve a intentarlo.'}',
         );
 
         Navigator.pushReplacement(
@@ -232,291 +285,514 @@ class _ExamViewState extends State<ExamView> {
       } else {
         setState(() => _isSubmitting = false);
         final String errorMessage =
-            res['message']?.toString() ?? 'Error al guardar el examen';
+            res['message']?.toString() ?? 'No se pudo enviar tu examen. Inténtalo de nuevo.';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
+        AlertaFlotante.mostrar(
+          context,
+          titulo: 'No se pudo enviar el examen',
+          mensaje: errorMessage,
+          tipo: TipoAlerta.error,
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al enviar el examen: $e'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'No se pudo enviar el examen',
+        mensaje: 'Tus respuestas no se enviaron. Inténtalo de nuevo.',
+        tipo: TipoAlerta.error,
       );
     }
+  }
+
+  Widget _estadoCentral({
+    required IconData icono,
+    required String titulo,
+    required String mensaje,
+    Widget? accion,
+  }) {
+    return CentradoDesplazable(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flotante(
+            amplitud: 6,
+            escala: 0.05,
+            child: Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_primary, _exam],
+                ),
+                boxShadow: [
+                  BoxShadow(color: _primary.withValues(alpha: 0.3), blurRadius: 22, offset: const Offset(0, 10)),
+                ],
+              ),
+              child: Icon(icono, color: Colors.white, size: 46),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _text),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            mensaje,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: _muted, height: 1.4),
+          ),
+          if (accion != null) ...[const SizedBox(height: 24), accion],
+        ],
+      ),
+    );
+  }
+
+  Widget _barraSuperior(bool horizontal) {
+    final total = _preguntas.length;
+    final respondidas = _respuestasUsuario.length;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, horizontal ? 4 : 10, 20, horizontal ? 6 : 12),
+      child: AnchoMaximo(
+        maximo: 800,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: _text),
+                  onPressed: _salir,
+                ),
+                Expanded(
+                  child: Text(
+                    widget.examen['titulo']?.toString() ?? 'Examen',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _text),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [_primary, _exam]),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.task_alt_rounded, size: 15, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$respondidas/$total',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Row(
+                children: List.generate(total, (i) {
+                  final actual = i == _currentQuestionIndex;
+                  final respondida = _respuestasUsuario.containsKey(i);
+                  final color = actual
+                      ? _exam
+                      : respondida
+                          ? _primary
+                          : const Color(0xFFE2E8F0);
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _irA(i),
+                      child: Padding(
+                        padding: EdgeInsets.only(right: i == total - 1 ? 0 : 4, top: 6, bottom: 6),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                          height: actual ? 8 : 6,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: actual
+                                ? [BoxShadow(color: _exam.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))]
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tarjetaPregunta(String enunciado, bool horizontal) {
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: _primary.withValues(alpha: 0.10), blurRadius: 22, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -18,
+            top: -18,
+            child: Icon(Icons.quiz_rounded, size: 110, color: _primary.withValues(alpha: 0.05)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 6,
+                decoration: const BoxDecoration(gradient: LinearGradient(colors: [_primary, _exam])),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, horizontal ? 14 : 18, 20, horizontal ? 16 : 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flotante(
+                          amplitud: 2.5,
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: const Icon(Icons.psychology_alt_rounded, color: _exam, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'PREGUNTA ${_currentQuestionIndex + 1} DE ${_preguntas.length}',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                            color: _exam,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextoConDinero(
+                      enunciado,
+                      acento: _exam,
+                      tamano: horizontal ? 18 : 20,
+                      color: _text,
+                      peso: FontWeight.w700,
+                      altura: 1.3,
+                      alineacion: TextAlign.justify,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _opcion(int index, dynamic rawOption, bool seleccionada) {
+    String optionText = '';
+    String? inciso;
+    if (rawOption is Map) {
+      optionText = rawOption['texto']?.toString() ?? '';
+      inciso = rawOption['inciso']?.toString();
+    } else {
+      optionText = rawOption.toString();
+    }
+    final letter = (inciso != null && inciso.isNotEmpty)
+        ? inciso
+        : (index < _letras.length ? _letras[index] : '${index + 1}');
+
+    return AnimatedScale(
+      scale: seleccionada ? 1.015 : 1,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          gradient: seleccionada
+              ? const LinearGradient(colors: [Color(0xFFEBF2FE), Color(0xFFEEF2FF)])
+              : null,
+          color: seleccionada ? null : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: seleccionada ? _primary : const Color(0xFFE2E8F0),
+            width: seleccionada ? 2 : 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (seleccionada ? _primary : const Color(0xFF0F172A)).withValues(alpha: seleccionada ? 0.16 : 0.04),
+              blurRadius: seleccionada ? 16 : 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _onOptionSelected(index),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: seleccionada ? const LinearGradient(colors: [_primary, _exam]) : null,
+                      color: seleccionada ? null : const Color(0xFFF1F5F9),
+                    ),
+                    child: Text(
+                      letter,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: seleccionada ? Colors.white : const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: TextoConDinero(
+                      optionText,
+                      acento: _primary,
+                      tamano: 15,
+                      color: seleccionada ? _text : const Color(0xFF334155),
+                      peso: FontWeight.w600,
+                      altura: 1.35,
+                      alineacion: TextAlign.justify,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedScale(
+                    scale: seleccionada ? 1 : 0,
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutBack,
+                    child: const Icon(Icons.check_circle_rounded, color: _primary, size: 24),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _barraInferior(bool horizontal, int? seleccion) {
+    final ultima = _currentQuestionIndex == _preguntas.length - 1;
+    final altura = horizontal ? 46.0 : 52.0;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        horizontal ? 8 : 12,
+        20,
+        (horizontal ? 8 : 16) + MediaQuery.paddingOf(context).bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, -4)),
+        ],
+      ),
+      child: AnchoMaximo(
+        maximo: 800,
+        child: Row(
+          children: [
+            if (_currentQuestionIndex > 0) ...[
+              SizedBox(
+                width: altura,
+                height: altura,
+                child: OutlinedButton(
+                  onPressed: _previousQuestion,
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: const Icon(Icons.arrow_back_rounded, color: _muted),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: AnimatedOpacity(
+                opacity: seleccion == null ? 0.55 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: ultima ? const [_exam, Color(0xFF7C3AED)] : const [_primary, _exam],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: seleccion == null
+                        ? null
+                        : [BoxShadow(color: _primary.withValues(alpha: 0.3), blurRadius: 14, offset: const Offset(0, 6))],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: seleccion == null ? null : _nextQuestion,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size(double.infinity, altura),
+                      backgroundColor: Colors.transparent,
+                      disabledBackgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          ultima ? 'Finalizar examen' : 'Siguiente',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(ultima ? Icons.flag_rounded : Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_preguntas.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
-          title: const Text('Examen'),
-          backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF1E293B),
-          elevation: 0,
-        ),
-        body: const Center(
-          child: Text(
-            'Este examen no contiene preguntas disponibles.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+        backgroundColor: const Color(0xFFF4F7FE),
+        body: SafeArea(
+          child: _estadoCentral(
+            icono: Icons.quiz_outlined,
+            titulo: 'Examen sin preguntas',
+            mensaje: 'Este examen no contiene preguntas disponibles.',
+            accion: OutlinedButton(
+              onPressed: () => Navigator.maybePop(context),
+              child: const Text('Regresar'),
+            ),
           ),
         ),
       );
     }
 
-    final preguntaActual =
-        _preguntas[_currentQuestionIndex] as Map<String, dynamic>;
-    final String enunciado =
-        preguntaActual['pregunta'] ?? preguntaActual['enunciado'] ?? '';
+    final preguntaActual = _preguntas[_currentQuestionIndex] as Map<String, dynamic>;
+    final String enunciado = (preguntaActual['pregunta'] ?? preguntaActual['enunciado'] ?? '').toString();
     final List<dynamic> opciones = (preguntaActual['opciones'] as List?) ?? [];
     final int? selectedOptionIndex = _respuestasUsuario[_currentQuestionIndex];
+    final horizontal = context.esHorizontal;
 
-    final double progress = (_currentQuestionIndex + 1) / _preguntas.length;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SafeArea(
-        child: _isSubmitting
-            ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: Color(0xFF1D61E7)),
-                    SizedBox(height: 16),
-                    Text(
-                      'Enviando respuestas...',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+    return PopScope(
+      canPop: _respuestasUsuario.isEmpty && !_isSubmitting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_isSubmitting) _salir();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F7FE),
+        body: _isSubmitting
+            ? SafeArea(
+                child: _estadoCentral(
+                  icono: Icons.fact_check_rounded,
+                  titulo: 'Calificando tus respuestas…',
+                  mensaje: 'En un momento verás tu resultado.',
+                  accion: const SizedBox(
+                    width: 140,
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      color: _primary,
+                      backgroundColor: Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.all(Radius.circular(6)),
                     ),
-                  ],
+                  ),
                 ),
               )
-            : Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 12),
-
-                          // 1. Barra Superior con botón Atrás y Título
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_back_ios_new_rounded,
-                                    color: Color(0xFF1E293B),
-                                    size: 20,
-                                  ),
-                                  onPressed: _previousQuestion,
-                                ),
-                              ),
-                              Text(
-                                widget.examen['titulo'] ?? 'Examen',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // 2. Indicador dinámico "Pregunta X de Y"
-                          Text(
-                            'Pregunta ${_currentQuestionIndex + 1} de ${_preguntas.length}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-
-                          // Barra de Progreso Dinámica
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 6,
-                              backgroundColor: const Color(0xFFE2E8F0),
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFF1D61E7),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 36),
-
-                          // 3. Enunciado Dinámico
-                          Text(
-                            enunciado,
-                            textAlign: TextAlign.justify,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
-                              height: 1.25,
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // 4. Lista Dinámica de Opciones
-                          ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: opciones.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 14),
-                            itemBuilder: (context, index) {
-                              final isSelected = selectedOptionIndex == index;
-                              final rawOption = opciones[index];
-
-                              String optionText = '';
-                              String? inciso;
-
-                              if (rawOption is Map) {
-                                optionText =
-                                    rawOption['texto']?.toString() ?? '';
-                                inciso = rawOption['inciso']?.toString();
-                              } else {
-                                optionText = rawOption.toString();
-                              }
-
-                              final letter = (inciso != null &&
-                                      inciso.isNotEmpty)
-                                  ? inciso
-                                  : (index < _letras.length
-                                      ? _letras[index]
-                                      : '${index + 1}');
-
-                              return Material(
-                                color: isSelected
-                                    ? const Color(0xFFEBF2FE)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                child: InkWell(
-                                  onTap: () => _onOptionSelected(index),
-                                  borderRadius: BorderRadius.circular(18),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? const Color(0xFF1D61E7)
-                                            : const Color(0xFFE2E8F0),
-                                        width: isSelected ? 1.5 : 1.2,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Círculo con la letra
-                                        Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: isSelected
-                                                ? const Color(0xFF1D61E7)
-                                                : const Color(0xFFF1F5F9),
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              letter,
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: isSelected
-                                                    ? Colors.white
-                                                    : const Color(0xFF475569),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-
-                                        const SizedBox(width: 16),
-
-                                        // Texto de la opción
-                                        Expanded(
-                                          child: Text(
-                                            optionText,
-                                            textAlign: TextAlign.justify,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                              color: isSelected
-                                                  ? const Color(0xFF1E293B)
-                                                  : const Color(0xFF334155),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+            : SafeArea(
+                bottom: false,
+                child: Column(
+                  children: [
+                    _barraSuperior(horizontal),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: AnchoMaximo(
+                          maximo: 800,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 350),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              final entra = child.key == ValueKey(_currentQuestionIndex);
+                              final desde = (_haciaAdelante == entra) ? 0.15 : -0.15;
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: Tween<Offset>(begin: Offset(desde, 0), end: Offset.zero).animate(animation),
+                                  child: child,
                                 ),
                               );
                             },
+                            layoutBuilder: (actual, previos) => Stack(
+                              alignment: Alignment.topCenter,
+                              children: [...previos, if (actual != null) actual],
+                            ),
+                            child: Column(
+                              key: ValueKey(_currentQuestionIndex),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(height: horizontal ? 6 : 10),
+                                _tarjetaPregunta(enunciado, horizontal),
+                                SizedBox(height: horizontal ? 14 : 20),
+                                for (int i = 0; i < opciones.length; i++) ...[
+                                  Aparecer(
+                                    orden: i + 1,
+                                    child: _opcion(i, opciones[i], selectedOptionIndex == i),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                                const SizedBox(height: 16),
+                              ],
+                            ),
                           ),
-
-                          const SizedBox(height: 24),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 5. Botón Dinámico Siguiente / Finalizar Examen
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0,
-                      vertical: 20.0,
-                    ),
-                    child: ElevatedButton(
-                      onPressed: selectedOptionIndex == null
-                          ? null
-                          : _nextQuestion,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 52),
-                        backgroundColor: const Color(0xFF1D61E7),
-                        disabledBackgroundColor: const Color(0xFF94A3B8),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        _currentQuestionIndex == _preguntas.length - 1
-                            ? 'Finalizar Examen'
-                            : 'Siguiente',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    _barraInferior(horizontal, selectedOptionIndex),
+                  ],
+                ),
               ),
       ),
     );
