@@ -291,11 +291,19 @@ class _CoursesViewState extends State<CoursesView> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.notifications_active_rounded, color: Color(0xFF2563EB)),
-                            SizedBox(width: 8),
-                            Text(
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.35), width: 1.2),
+                              ),
+                              child: const Icon(Icons.notifications_active_rounded, color: Color(0xFFD97706), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
                               'Notificaciones',
                               style: TextStyle(
                                 fontSize: 18,
@@ -775,7 +783,7 @@ class _CoursesViewState extends State<CoursesView> {
       height: 54,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 11, 13, 15),
+          color: const Color(0xFF1D61E7),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
@@ -829,14 +837,39 @@ class _CoursesViewState extends State<CoursesView> {
   Widget _buildEmptyState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
       margin: const EdgeInsets.only(bottom: 20),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Column(
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            right: -24,
+            top: -22,
+            child: IgnorePointer(
+              child: Transform.rotate(
+                angle: -0.3,
+                child: Icon(Icons.savings_rounded, size: 110, color: const Color(0xFF1D61E7).withValues(alpha: 0.06)),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -20,
+            bottom: -26,
+            child: IgnorePointer(
+              child: Transform.rotate(
+                angle: 0.35,
+                child: Icon(Icons.trending_up_rounded, size: 96, color: const Color(0xFF16A34A).withValues(alpha: 0.06)),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+            child: Column(
         children: const [
           Icon(Icons.auto_stories_outlined, size: 48, color: Color(0xFF94A3B8)),
           SizedBox(height: 12),
@@ -849,6 +882,9 @@ class _CoursesViewState extends State<CoursesView> {
             'Selecciona un tema para generar tu primera guía de estudio con IA.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+        ],
+            ),
           ),
         ],
       ),
@@ -1106,7 +1142,7 @@ class _CourseCardState extends State<_CourseCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.all(16),
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -1122,7 +1158,45 @@ class _CourseCardState extends State<_CourseCard> {
               ),
             ],
           ),
-          child: Row(
+          child: Stack(
+            children: [
+              Positioned(
+                right: 34,
+                top: -20,
+                child: IgnorePointer(
+                  child: Transform.rotate(
+                    angle: -0.35,
+                    child: Icon(widget.topicIcon, size: 86, color: widget.topicColor.withValues(alpha: 0.07)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: -20,
+                bottom: -24,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.topicColor.withValues(alpha: 0.06),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -10,
+                bottom: -12,
+                child: IgnorePointer(
+                  child: Transform.rotate(
+                    angle: 0.45,
+                    child: Icon(widget.topicIcon, size: 44, color: widget.topicColor.withValues(alpha: 0.05)),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
@@ -1138,6 +1212,7 @@ class _CourseCardState extends State<_CourseCard> {
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: widget.topicColor.withValues(alpha: 0.35), width: 1.2),
                 ),
                 child: Icon(
                   widget.topicIcon,
@@ -1236,6 +1311,9 @@ class _CourseCardState extends State<_CourseCard> {
                       ],
                     ),
                   ],
+                ),
+              ),
+            ],
                 ),
               ),
             ],

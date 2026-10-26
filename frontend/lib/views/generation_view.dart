@@ -249,7 +249,7 @@ class _GenerationgGuideViewState extends State<GenerationView> {
         ),
         const SizedBox(height: 16),
         _buildStepItem(
-          title: 'Preparando ejercicios y examen',
+          title: 'Preparando exámenes',
           isCompleted: step4,
           isDotted: !step4 && step3,
         ),

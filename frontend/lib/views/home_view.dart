@@ -5,6 +5,7 @@ import 'login_view.dart';
 import 'register_view.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/ruta_suave.dart';
+import '../widgets/u_fondo.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -160,6 +161,18 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         },
         child: Stack(
           children: [
+            Positioned(
+              left: 0,
+              bottom: -(MediaQuery.sizeOf(context).shortestSide * 0.95).clamp(260.0, 500.0) * 0.12,
+              child: FadeTransition(
+                opacity: _interval(0.0, 0.6),
+                child: UFondo(
+                  tamano: (MediaQuery.sizeOf(context).shortestSide * 0.95).clamp(260.0, 500.0),
+                  color: Colors.white,
+                ),
+              ),
+            ),
+
             // Íconos relacionados que suben lentamente por el fondo
             Positioned.fill(
               child: IgnorePointer(

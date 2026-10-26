@@ -23,10 +23,29 @@ class _ProfileViewState extends State<ProfileView> {
   bool _reminderNotifications = false;
 
 
+  static const AnimationStyle _animacionHoja = AnimationStyle(
+    duration: Duration(milliseconds: 280),
+    reverseDuration: Duration(milliseconds: 200),
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  bool _fotosPrecargadas = false;
+
   @override
   void initState() {
     super.initState();
     _loadNotificationPrefs();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_fotosPrecargadas) return;
+    _fotosPrecargadas = true;
+    for (int i = 1; i <= FotoPerfil.total; i++) {
+      precacheImage(AssetImage(FotoPerfil.ruta(i)), context);
+    }
   }
 
   Future<void> _loadNotificationPrefs() async {
@@ -81,21 +100,28 @@ class _ProfileViewState extends State<ProfileView> {
     required String title,
     required IconData icon,
     required List<Widget> children,
+    Color color = const Color(0xFF1D61E7),
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return SingleChildScrollView(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: icon,
+          color: color,
+          child: SingleChildScrollView(
           padding: EdgeInsets.only(
             top: 20,
             left: 20,
             right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            bottom: 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -109,10 +135,11 @@ class _ProfileViewState extends State<ProfileView> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFDBEAFE),
+                          color: color.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
                         ),
-                        child: Icon(icon, color: const Color(0xFF1D61E7), size: 20),
+                        child: Icon(icon, color: color, size: 20),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -135,6 +162,8 @@ class _ProfileViewState extends State<ProfileView> {
               ...children,
             ],
           ),
+          ),
+          ),
         );
       },
     );
@@ -151,19 +180,25 @@ class _ProfileViewState extends State<ProfileView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.person_outline_rounded,
+          color: const Color(0xFF1D61E7),
+          child: StatefulBuilder(
           builder: (context, setModalState) {
             return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
                 right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -173,10 +208,10 @@ class _ProfileViewState extends State<ProfileView> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.person_outline_rounded, color: Color(0xFF1D61E7)),
-                          SizedBox(width: 8),
-                          Text(
+                        children: [
+                          _iconoHoja(Icons.person_outline_rounded, const Color(0xFF1D61E7)),
+                          const SizedBox(width: 12),
+                          const Text(
                             'Información personal',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
@@ -299,6 +334,8 @@ class _ProfileViewState extends State<ProfileView> {
               ),
             );
           },
+          ),
+          ),
         );
       },
     );
@@ -311,19 +348,25 @@ class _ProfileViewState extends State<ProfileView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.photo_camera_outlined,
+          color: const Color(0xFFEC4899),
+          child: StatefulBuilder(
           builder: (context, setModalState) {
             return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
                 right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -333,10 +376,10 @@ class _ProfileViewState extends State<ProfileView> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.photo_camera_outlined, color: Color(0xFF1D61E7)),
-                          SizedBox(width: 8),
-                          Text(
+                        children: [
+                          _iconoHoja(Icons.photo_camera_outlined, const Color(0xFFEC4899)),
+                          const SizedBox(width: 12),
+                          const Text(
                             'Foto de perfil',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
@@ -448,6 +491,8 @@ class _ProfileViewState extends State<ProfileView> {
               ),
             );
           },
+          ),
+          ),
         );
       },
     );
@@ -463,19 +508,25 @@ class _ProfileViewState extends State<ProfileView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.lock_outline_rounded,
+          color: const Color(0xFF7C3AED),
+          child: StatefulBuilder(
           builder: (context, setModalState) {
             return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
                 right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -485,10 +536,10 @@ class _ProfileViewState extends State<ProfileView> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.lock_outline_rounded, color: Color(0xFF1D61E7)),
-                          SizedBox(width: 8),
-                          Text(
+                        children: [
+                          _iconoHoja(Icons.lock_outline_rounded, const Color(0xFF7C3AED)),
+                          const SizedBox(width: 12),
+                          const Text(
                             'Cambiar contraseña',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
@@ -585,8 +636,22 @@ class _ProfileViewState extends State<ProfileView> {
               ),
             );
           },
+          ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _iconoHoja(IconData icono, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: Icon(icono, color: color, size: 20),
     );
   }
 
@@ -607,20 +672,7 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Widget _buildPasswordField(String label, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      obscureText: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-      ),
-    );
+    return _CampoContrasena(label: label, controller: controller);
   }
 
   // 3. Modal: Configuración de Notificaciones
@@ -628,6 +680,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Notificaciones',
       icon: Icons.notifications_none_rounded,
+      color: const Color(0xFFD97706),
       children: [
         StatefulBuilder(
           builder: (context, setModalState) {
@@ -707,6 +760,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Ayuda y soporte',
       icon: Icons.help_outline_rounded,
+      color: const Color(0xFF0891B2),
       children: [
         const Text(
           'Problemas frecuentes y solución de errores:',
@@ -714,12 +768,12 @@ class _ProfileViewState extends State<ProfileView> {
         ),
         const SizedBox(height: 10),
         _buildFaqTile(
-          'Aparece "Sin conexión" o "Error de conexión"',
+          'Aparece "Sin conexión"',
           'Revisa que tengas Wi-Fi o datos móviles activos. Si tu conexión está bien, espera unos minutos e inténtalo de nuevo.',
         ),
         _buildFaqTile(
           'Mi guía con IA tarda en generar',
-          'La generación del plan de estudio evalúa múltiples preguntas y lecciones. El proceso suele tomar de 5 a 12 segundos.',
+          'La generación del plan de estudio evalúa múltiples preguntas y lecciones. El tiempo suele incrementar dependiendo del tamaño de la guía.',
         ),
         _buildFaqTile(
           'Error al guardar mis respuestas del examen',
@@ -754,6 +808,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Acerca de U-Learn',
       icon: Icons.info_outline_rounded,
+      color: const Color(0xFF4F46E5),
       children: [
         const Center(
           child: Column(
@@ -764,8 +819,8 @@ class _ProfileViewState extends State<ProfileView> {
               SizedBox(height: 12),
               Text(
                 'U-Learn es tu tutor personal de educación financiera impulsado por Inteligencia Artificial.\n\n'
-                'Aprende a dominar tus tarjetas de crédito, construir presupuestos reales, crear fondos de ahorro e iniciar tus primeras inversiones sin lenguaje complicado.\n\n'
-                'Nuestra metodología divide temas complejos en guías de estudio interactivas con exámenes de evaluación inmediata para medir tu aprendizaje paso a paso.',
+                'Aprende a dominar tus tarjetas de crédito, construir presupuestos reales y/o crear fondos de ahorro sin la necesidad de entender un lenguaje complicado.\n\n'
+                'Nuestra metodología divide temas complejos en guías de estudio con exámenes de evaluación inmediata para medir tu aprendizaje paso a paso.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.5),
               ),
@@ -817,6 +872,7 @@ class _ProfileViewState extends State<ProfileView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      resizeToAvoidBottomInset: false,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -933,18 +989,21 @@ class _ProfileViewState extends State<ProfileView> {
                     _buildProfileOption(
                       icon: Icons.person_outline_rounded,
                       title: 'Información personal',
+                      iconColor: const Color(0xFF1D61E7),
                       onTap: _showPersonalInfoModal,
                     ),
                     const SizedBox(height: 12),
                     _buildProfileOption(
                       icon: Icons.photo_camera_outlined,
                       title: 'Foto de perfil',
+                      iconColor: const Color(0xFFEC4899),
                       onTap: _showFotoPerfilModal,
                     ),
                     const SizedBox(height: 12),
                     _buildProfileOption(
                       icon: Icons.lock_outline_rounded,
                       title: 'Cambiar contraseña',
+                      iconColor: const Color(0xFF7C3AED),
                       onTap: _showChangePasswordModal,
                     ),
                     const SizedBox(height: 12),
@@ -958,6 +1017,7 @@ class _ProfileViewState extends State<ProfileView> {
                     _buildProfileOption(
                       icon: Icons.shield_outlined,
                       title: 'Términos y privacidad',
+                      iconColor: const Color(0xFF16A34A),
                       onTap: () => Navigator.push(
                         context,
                         RutaSuave(page: const TermsView()),
@@ -967,34 +1027,33 @@ class _ProfileViewState extends State<ProfileView> {
                     _buildProfileOption(
                       icon: Icons.help_outline_rounded,
                       title: 'Ayuda y soporte',
+                      iconColor: const Color(0xFF0891B2),
                       onTap: _showHelpSupportModal,
                     ),
                     const SizedBox(height: 12),
                     _buildProfileOption(
                       icon: Icons.info_outline_rounded,
                       title: 'Acerca de U-Learn',
+                      iconColor: const Color(0xFF4F46E5),
                       onTap: _showAboutModal,
                     ),
 
                     const SizedBox(height: 28),
 
                     // 4. Botón Cerrar Sesión
-                    OutlinedButton(
+                    ElevatedButton(
                       onPressed: _showLogoutDialog,
-                      style: OutlinedButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 50),
-                        side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
                       ),
                       child: const Text(
                         'Cerrar sesión',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFEF4444),
-                        ),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
 
@@ -1022,7 +1081,7 @@ class _ProfileViewState extends State<ProfileView> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -1030,10 +1089,47 @@ class _ProfileViewState extends State<ProfileView> {
               width: 1.2,
             ),
           ),
-          child: Row(
+          child: Stack(
             children: [
-              Icon(icon, color: iconColor, size: 22),
-              const SizedBox(width: 16),
+              Positioned(
+                right: 36,
+                top: -16,
+                child: IgnorePointer(
+                  child: Transform.rotate(
+                    angle: -0.35,
+                    child: Icon(icon, size: 68, color: iconColor.withValues(alpha: 0.08)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: -14,
+                bottom: -18,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: iconColor.withValues(alpha: 0.06),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: iconColor.withValues(alpha: 0.35), width: 1.2),
+                ),
+                child: Icon(icon, color: iconColor, size: 21),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   title,
@@ -1050,9 +1146,122 @@ class _ProfileViewState extends State<ProfileView> {
                 size: 20,
               ),
             ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CampoContrasena extends StatefulWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _CampoContrasena({required this.label, required this.controller});
+
+  @override
+  State<_CampoContrasena> createState() => _CampoContrasenaState();
+}
+
+class _CampoContrasenaState extends State<_CampoContrasena> {
+  bool _oculta = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: _oculta,
+      enableSuggestions: false,
+      autocorrect: false,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        suffixIcon: IconButton(
+          tooltip: _oculta ? 'Mostrar contraseña' : 'Ocultar contraseña',
+          icon: Icon(
+            _oculta ? Icons.remove_red_eye_outlined : Icons.visibility_off_outlined,
+            color: const Color(0xFF94A3B8),
+            size: 20,
+          ),
+          onPressed: () => setState(() => _oculta = !_oculta),
+        ),
+      ),
+    );
+  }
+}
+
+class _AjusteTeclado extends StatelessWidget {
+  final Widget child;
+
+  const _AjusteTeclado({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: RepaintBoundary(child: child),
+    );
+  }
+}
+
+class _FondoHoja extends StatelessWidget {
+  final IconData icono;
+  final Color color;
+  final Widget child;
+
+  const _FondoHoja({required this.icono, required this.color, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: -34,
+          right: -26,
+          child: IgnorePointer(
+            child: Transform.rotate(
+              angle: -0.3,
+              child: Icon(icono, size: 150, color: color.withValues(alpha: 0.07)),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -46,
+          left: -36,
+          child: IgnorePointer(
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.05),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 70,
+          right: -20,
+          child: IgnorePointer(
+            child: Transform.rotate(
+              angle: 0.4,
+              child: Icon(icono, size: 70, color: color.withValues(alpha: 0.05)),
+            ),
+          ),
+        ),
+        child,
+      ],
     );
   }
 }

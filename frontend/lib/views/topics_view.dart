@@ -46,7 +46,7 @@ class _TopicsViewState extends State<TopicsView>
   // Movimiento suave de los íconos de cada tema (en bucle)
   late final AnimationController _iconController;
 
-  bool _buttonPressed = false;
+  final ValueNotifier<bool> _buttonPressed = ValueNotifier(false);
 
   @override
   void initState() {
@@ -66,6 +66,7 @@ class _TopicsViewState extends State<TopicsView>
   void dispose() {
     _shimmerController.dispose();
     _iconController.dispose();
+    _buttonPressed.dispose();
     super.dispose();
   }
 
@@ -182,10 +183,7 @@ class _TopicsViewState extends State<TopicsView>
                     ),
                   ),
                   isFetchingTopics
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 60),
-                          child: CircularProgressIndicator(color: _primary),
-                        )
+                      ? AnchoMaximo(maximo: 760, child: _buildEsqueleto())
                       : _errorTemas && topicsFromDb.isEmpty
                           ? _buildErrorTemas()
                           : horizontal
@@ -213,6 +211,7 @@ class _TopicsViewState extends State<TopicsView>
             decoration: BoxDecoration(
               color: const Color(0xFFEBF2FE),
               borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: _primary.withValues(alpha: 0.3), width: 1.4),
             ),
             child: const Icon(Icons.cloud_off_rounded, color: _primary, size: 36),
           ),
@@ -258,14 +257,14 @@ class _TopicsViewState extends State<TopicsView>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '¿Qué deseas aprender?',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _text),
-                ),
+                _titulo(Icons.lightbulb_rounded, const Color(0xFFF59E0B), '¿Qué deseas aprender?', 20),
                 const SizedBox(height: 4),
-                const Text(
-                  'Selecciona el tema que más te interese',
-                  style: TextStyle(fontSize: 13, color: _muted),
+                const Padding(
+                  padding: EdgeInsets.only(left: 46),
+                  child: Text(
+                    'Selecciona el tema que más te interese',
+                    style: TextStyle(fontSize: 13, color: _muted),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _buildTopicsGrid(),
@@ -278,10 +277,7 @@ class _TopicsViewState extends State<TopicsView>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '¿En cuánto tiempo deseas terminarlo?',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _text),
-                ),
+                _titulo(Icons.schedule_rounded, _primary, '¿En cuánto tiempo deseas terminarlo?', 16),
                 const SizedBox(height: 14),
                 _buildDurationSelector(),
                 const SizedBox(height: 20),
@@ -306,18 +302,14 @@ class _TopicsViewState extends State<TopicsView>
           const SizedBox(height: 24),
 
           // 2. Sección: ¿Qué deseas aprender?
-          const Text(
-            '¿Qué deseas aprender?',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
+          _titulo(Icons.lightbulb_rounded, const Color(0xFFF59E0B), '¿Qué deseas aprender?', 22),
           const SizedBox(height: 4),
-          const Text(
-            'Selecciona el tema que más te interese',
-            style: TextStyle(fontSize: 14, color: _muted),
+          const Padding(
+            padding: EdgeInsets.only(left: 46),
+            child: Text(
+              'Selecciona el tema que más te interese',
+              style: TextStyle(fontSize: 14, color: _muted),
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -326,14 +318,7 @@ class _TopicsViewState extends State<TopicsView>
           const SizedBox(height: 32),
 
           // 3. Sección: Duración
-          const Text(
-            '¿En cuánto tiempo deseas terminarlo?',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
+          _titulo(Icons.schedule_rounded, _primary, '¿En cuánto tiempo deseas terminarlo?', 16),
           const SizedBox(height: 16),
 
           _buildDurationSelector(),
@@ -348,24 +333,118 @@ class _TopicsViewState extends State<TopicsView>
     );
   }
 
+  Widget _titulo(IconData icono, Color color, String texto, double tamano) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
+          ),
+          child: Icon(icono, color: color, size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(fontSize: tamano, fontWeight: FontWeight.bold, color: _text),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const SliverGridDelegateWithMaxCrossAxisExtent _rejilla = SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 150,
+    crossAxisSpacing: 12,
+    mainAxisSpacing: 12,
+    childAspectRatio: 0.95,
+  );
+
+  Widget _buildEsqueleto() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+      child: _Pulso(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 220,
+              height: 22,
+              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(8)),
+            ),
+            const SizedBox(height: 20),
+            GridView.builder(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: _rejilla,
+              itemCount: 6,
+              itemBuilder: (context, index) => Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _border, width: 1.2),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(14)),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 70,
+                      height: 10,
+                      decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Grid de temas dinámico
   Widget _buildTopicsGrid() {
+    if (topicsFromDb.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _border, width: 1.2),
+        ),
+        child: const Text(
+          'Por ahora no hay temas disponibles. Inténtalo más tarde.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: _muted),
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 150,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.95,
-      ),
+      gridDelegate: _rejilla,
       itemCount: topicsFromDb.length,
       itemBuilder: (context, index) {
         final topic = topicsFromDb[index];
         final name = (topic['nombre_tema'] ?? '').toString();
         final isSelected = selectedTopicId == topic['id_tema'];
         final style = _getTopicStyle(name);
+        final IconData icono = style['icon'] as IconData;
+        final Color color = style['color'] as Color;
 
         return GestureDetector(
           onTap: () => _select(() {
@@ -377,57 +456,85 @@ class _TopicsViewState extends State<TopicsView>
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.all(10),
+              duration: const Duration(milliseconds: 200),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isSelected ? Color.alphaBlend(color.withValues(alpha: 0.07), Colors.white) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? _primary : _border,
+                  color: isSelected ? color : _border,
                   width: isSelected ? 2.0 : 1.2,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: isSelected ? 0.18 : 0),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
               child: Stack(
                 children: [
                   Positioned(
-                    top: 0,
-                    right: 0,
+                    right: -16,
+                    bottom: -18,
+                    child: IgnorePointer(
+                      child: Transform.rotate(
+                        angle: -0.35,
+                        child: Icon(icono, size: 68, color: color.withValues(alpha: isSelected ? 0.12 : 0.06)),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: -14,
+                    top: -14,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color.withValues(alpha: 0.06),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
                     child: AnimatedScale(
                       scale: isSelected ? 1 : 0,
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOutBack,
-                      child: const CircleAvatar(
+                      child: CircleAvatar(
                         radius: 10,
-                        backgroundColor: _primary,
-                        child: Icon(Icons.check, size: 12, color: Colors.white),
+                        backgroundColor: color,
+                        child: const Icon(Icons.check, size: 12, color: Colors.white),
                       ),
                     ),
                   ),
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildTopicIcon(
-                          style['icon'] as IconData,
-                          style['color'] as Color,
-                          index,
-                          isSelected,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.w600,
-                            color: _text,
-                            height: 1.2,
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildTopicIcon(icono, color, index, isSelected),
+                          const SizedBox(height: 10),
+                          Text(
+                            name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? Color.lerp(_text, color, 0.35) : _text,
+                              height: 1.2,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -458,10 +565,19 @@ class _TopicsViewState extends State<TopicsView>
         );
       },
       child: AnimatedScale(
-        scale: isSelected ? 1.15 : 1.0,
+        scale: isSelected ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutBack,
-        child: Icon(icon, color: color, size: 28),
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
+          ),
+          child: Icon(icon, color: color, size: 26),
+        ),
       ),
       ),
     );
@@ -583,33 +699,67 @@ class _TopicsViewState extends State<TopicsView>
         ),
       ),
       child: Container(
-        key: ValueKey(selectedWeeks),
+        key: ValueKey('$selectedWeeks|$selectedTopicName'),
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: const Color(0xFFEBF2FE),
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _primary.withValues(alpha: 0.18), width: 1.2),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            const Text(
-              'Tu guía incluirá en total:',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: _primary,
+            Positioned(
+              right: -22,
+              top: -26,
+              child: IgnorePointer(
+                child: Transform.rotate(
+                  angle: -0.3,
+                  child: Icon(Icons.auto_awesome_rounded, size: 110, color: _primary.withValues(alpha: 0.07)),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _planStat(Icons.layers_rounded, '$secciones', 'secciones'),
-                const SizedBox(width: 10),
-                _planStat(Icons.menu_book_rounded, '${secciones * temas}', 'temas'),
-                const SizedBox(width: 10),
-                _planStat(Icons.quiz_rounded, '$secciones', 'exámenes'),
-              ],
+            Positioned(
+              left: -30,
+              bottom: -34,
+              child: IgnorePointer(
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _primary.withValues(alpha: 0.06),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    selectedTopicName.isEmpty
+                        ? 'Tu guía incluirá en total:'
+                        : 'Tu guía de «$selectedTopicName» incluirá en total:',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: _primary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _planStat(Icons.layers_rounded, '$secciones', 'secciones', _primary),
+                      const SizedBox(width: 10),
+                      _planStat(Icons.menu_book_rounded, '${secciones * temas}', 'temas', const Color(0xFF16A34A)),
+                      const SizedBox(width: 10),
+                      _planStat(Icons.quiz_rounded, '$secciones', 'exámenes', const Color(0xFF4F46E5)),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -617,17 +767,25 @@ class _TopicsViewState extends State<TopicsView>
     );
   }
 
-  Widget _planStat(IconData icon, String value, String label) {
+  Widget _planStat(IconData icon, String value, String label, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.25), width: 1.2),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 18, color: _primary),
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 16, color: color),
+            ),
             const SizedBox(height: 4),
             Text(
               value,
@@ -682,17 +840,19 @@ class _TopicsViewState extends State<TopicsView>
     return Padding(
       padding: conMargen ? const EdgeInsets.fromLTRB(20, 8, 20, 16) : EdgeInsets.zero,
       child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _buttonPressed = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _buttonPressed = false) : null,
-        onTapCancel: () => setState(() => _buttonPressed = false),
+        onTapDown: enabled ? (_) => _buttonPressed.value = true : null,
+        onTapUp: enabled ? (_) => _buttonPressed.value = false : null,
+        onTapCancel: () => _buttonPressed.value = false,
         onTap: enabled
             ? () {
                 HapticFeedback.lightImpact();
                 _generate();
               }
             : null,
-        child: AnimatedScale(
-          scale: _buttonPressed ? 0.96 : 1.0,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: _buttonPressed,
+          builder: (context, presionado, _) => AnimatedScale(
+          scale: presionado ? 0.96 : 1.0,
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOut,
           child: AnimatedOpacity(
@@ -708,9 +868,9 @@ class _TopicsViewState extends State<TopicsView>
                     ? [
                         BoxShadow(
                           color: _primary.withValues(
-                              alpha: _buttonPressed ? 0.2 : 0.35),
-                          blurRadius: _buttonPressed ? 8 : 18,
-                          offset: Offset(0, _buttonPressed ? 3 : 8),
+                              alpha: presionado ? 0.2 : 0.35),
+                          blurRadius: presionado ? 8 : 18,
+                          offset: Offset(0, presionado ? 3 : 8),
                         ),
                       ]
                     : [],
@@ -765,6 +925,39 @@ class _TopicsViewState extends State<TopicsView>
             ),
           ),
         ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Pulso extends StatefulWidget {
+  final Widget child;
+
+  const _Pulso({required this.child});
+
+  @override
+  State<_Pulso> createState() => _PulsoState();
+}
+
+class _PulsoState extends State<_Pulso> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.45, end: 1).animate(_c),
+        child: widget.child,
       ),
     );
   }

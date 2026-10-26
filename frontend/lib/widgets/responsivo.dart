@@ -26,6 +26,22 @@ class AnchoMaximo extends StatelessWidget {
   }
 }
 
+class EspacioTeclado extends StatelessWidget {
+  final Widget child;
+
+  const EspacioTeclado({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: child,
+    );
+  }
+}
+
 class CentradoDesplazable extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
