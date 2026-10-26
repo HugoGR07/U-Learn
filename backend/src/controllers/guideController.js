@@ -14,11 +14,22 @@ const BLOQUES_DESARROLLO = 3;
 const PREGUNTAS_POR_EXAMEN = 10;
 const MINUTOS_POR_EXAMEN = 15;
 const INCISOS = ['A', 'B', 'C', 'D'];
-const INTENTOS_POR_SECCION = 2;
-const CONCURRENCIA = parseInt(process.env.GEMINI_CONCURRENCIA || '12', 10);
-const PRESUPUESTO_TOTAL_MS = parseInt(process.env.GEMINI_PRESUPUESTO_TOTAL_MS || '280000', 10);
+
+const entero = (valor, defecto) => {
+  const n = parseInt(valor, 10);
+  return Number.isFinite(n) && n > 0 ? n : defecto;
+};
+
+const CONCURRENCIA = entero(process.env.GEMINI_CONCURRENCIA, 12);
+const INTENTOS_POR_PARTE = entero(process.env.GEMINI_INTENTOS_PARTE, 2);
+const MINIMO_PREGUNTAS_IA = 6;
+const PRESUPUESTO_TOTAL_MS = entero(process.env.GEMINI_PRESUPUESTO_TOTAL_MS, 270000);
+const LIMITE_ESTRUCTURA_MS = entero(process.env.GEMINI_LIMITE_ESTRUCTURA_MS, 110000);
+const RESERVA_RESCATE_MS = 55000;
+const RESERVA_EXAMEN_MS = 25000;
+const RESERVA_GUARDADO_MS = 8000;
+
 const restanteHasta = (fin) => Math.max(fin - Date.now(), 0);
-const INTENTOS_POR_PARTE = parseInt(process.env.GEMINI_INTENTOS_PARTE || '3', 10);
 
 const nivelThinking = (valor, defecto) => {
   const v = String(valor || '').trim().toUpperCase();
@@ -27,8 +38,8 @@ const nivelThinking = (valor, defecto) => {
   return ThinkingLevel[v] || defecto;
 };
 
-const THINKING_ESTRUCTURA = nivelThinking(process.env.GEMINI_THINKING_ESTRUCTURA, ThinkingLevel.LOW);
-const THINKING_CONTENIDO = nivelThinking(process.env.GEMINI_THINKING_CONTENIDO, ThinkingLevel.LOW);
+const THINKING_ESTRUCTURA = nivelThinking(process.env.GEMINI_THINKING_ESTRUCTURA, ThinkingLevel.MINIMAL);
+const THINKING_CONTENIDO = nivelThinking(process.env.GEMINI_THINKING_CONTENIDO, ThinkingLevel.MINIMAL);
 const THINKING_EXAMEN = nivelThinking(process.env.GEMINI_THINKING_EXAMEN, ThinkingLevel.MINIMAL);
 
 const generandoPorUsuario = new Set();
@@ -162,15 +173,53 @@ const examenSchema = {
             },
           },
           respuesta_correcta: { type: Type.STRING, enum: INCISOS },
+          justificacion: { type: Type.STRING },
         },
-        required: ['pregunta', 'opciones', 'respuesta_correcta'],
+        required: ['pregunta', 'opciones', 'respuesta_correcta', 'justificacion'],
       },
     },
   },
   required: ['preguntas'],
 };
 
+const seccionSchema = {
+  type: Type.OBJECT,
+  properties: {
+    temas: temasSchema.properties.temas,
+    preguntas: examenSchema.properties.preguntas,
+  },
+  required: ['temas', 'preguntas'],
+  propertyOrdering: ['temas', 'preguntas'],
+};
+
 const limpiarTexto = (valor) => (typeof valor === 'string' ? valor.trim() : '');
+
+const normalizarClave = (texto) =>
+  limpiarTexto(texto)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const mezclar = (lista) => {
+  const copia = [...lista];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+};
+
+const REFERENCIA_A_OPCIONES = /anteriores|ambas|ninguna de|todas las|inciso|opci[oó]n\s+[abcd]\b|\b[ABCD]\)\s*y\s*[ABCD]\)/i;
+
+const mezclarOpciones = (pregunta) => {
+  if (pregunta.opciones.some((op) => REFERENCIA_A_OPCIONES.test(op.texto))) return pregunta;
+  const textoCorrecto = pregunta.opciones.find((op) => op.inciso === pregunta.respuesta_correcta).texto;
+  const opciones = mezclar(pregunta.opciones.map((op) => op.texto)).map((texto, i) => ({ inciso: INCISOS[i], texto }));
+  const correcta = opciones.find((op) => op.texto === textoCorrecto).inciso;
+  return { ...pregunta, opciones, respuesta_correcta: correcta };
+};
 
 const normalizarPregunta = (preg) => {
   const enunciado = limpiarTexto(preg && preg.pregunta);
@@ -182,6 +231,7 @@ const normalizarPregunta = (preg) => {
     .map((texto, i) => ({ inciso: INCISOS[i], texto }));
 
   if (!enunciado || opciones.length !== INCISOS.length) return null;
+  if (new Set(opciones.map((op) => normalizarClave(op.texto))).size !== INCISOS.length) return null;
 
   let correcta = limpiarTexto(preg.respuesta_correcta).toUpperCase();
   if (!INCISOS.includes(correcta)) {
@@ -195,7 +245,7 @@ const normalizarPregunta = (preg) => {
   }
 
   if (!correcta) return null;
-  return { pregunta: enunciado, opciones, respuesta_correcta: correcta };
+  return mezclarOpciones({ pregunta: enunciado, opciones, respuesta_correcta: correcta });
 };
 
 const normalizarTema = (tema, plan, contexto = {}) => {
@@ -230,6 +280,8 @@ const normalizarTema = (tema, plan, contexto = {}) => {
   };
 };
 
+const temaUtil = (t) => t && t.contenido.conceptos.length > 0 && t.contenido.desarrollo.length > 0;
+
 const normalizarHilo = (hilo) => ({
   pregunta_central: limpiarTexto(hilo && hilo.pregunta_central),
   meta: limpiarTexto(hilo && hilo.meta),
@@ -243,7 +295,19 @@ Lo que el estudiante sabrá hacer al final: ${hilo.meta}
 Cifras de ejemplo hipotéticas para ilustrar (reutilízalas con estos mismos valores): ${hilo.datos_base}`
     : 'Usa cifras de referencia coherentes y constantes en todos los ejemplos de la sección.';
 
-const generarEstructura = async (tema, nivel, plan, fin) => {
+const normalizarSecciones = (data, plan) =>
+  (Array.isArray(data && data.secciones) ? data.secciones : [])
+    .map((s) => ({
+      titulo: limpiarTexto(s && s.titulo_seccion),
+      objetivo: limpiarTexto(s && s.objetivo),
+      conexion: limpiarTexto(s && s.conexion),
+      aporte: limpiarTexto(s && s.aporte),
+      temas: (Array.isArray(s && s.temas) ? s.temas : []).map(limpiarTexto).filter(Boolean).slice(0, plan.temas),
+    }))
+    .filter((s) => s.titulo && s.temas.length === plan.temas)
+    .slice(0, plan.secciones);
+
+const generarEstructura = async (tema, nivel, plan, finEstructura) => {
   const prompt = `Eres un experto educador en finanzas personales y diseñador instruccional.
 Diseña el temario de un curso sobre "${tema}" para nivel "${nivel}", con duración de ${plan.semanas} semana(s) (${SECCIONES_POR_SEMANA} secciones por semana).
 
@@ -258,29 +322,36 @@ Reglas OBLIGATORIAS:
 6. "objetivo" es una sola oración que dice qué podrá hacer el estudiante al terminar la sección.
 7. Todo en español neutro.`;
 
-  for (let intento = 1; intento <= INTENTOS_POR_SECCION; intento++) {
-    const data = await generarJSON(prompt, estructuraSchema, {
-      etiqueta: 'estructura',
-      thinking: THINKING_ESTRUCTURA,
-      presupuestoMs: restanteHasta(fin),
-    });
-    const secciones = (Array.isArray(data && data.secciones) ? data.secciones : [])
-      .map((s) => ({
-        titulo: limpiarTexto(s && s.titulo_seccion),
-        objetivo: limpiarTexto(s && s.objetivo),
-        conexion: limpiarTexto(s && s.conexion),
-        aporte: limpiarTexto(s && s.aporte),
-        temas: (Array.isArray(s && s.temas) ? s.temas : []).map(limpiarTexto).filter(Boolean).slice(0, plan.temas),
-      }))
-      .filter((s) => s.titulo && s.temas.length === plan.temas)
-      .slice(0, plan.secciones);
+  let mejor = null;
+  let ultimoError = null;
 
-    if (secciones.length === plan.secciones) {
-      return { hilo: normalizarHilo(data && data.hilo_conductor), secciones };
+  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
+    if (restanteHasta(finEstructura) < 10000) break;
+    try {
+      const data = await generarJSON(prompt, estructuraSchema, {
+        etiqueta: 'estructura',
+        thinking: intento === 1 ? THINKING_ESTRUCTURA : null,
+        presupuestoMs: restanteHasta(finEstructura),
+        timeoutMs: 80000,
+        respaldoMs: 35000,
+      });
+      const secciones = normalizarSecciones(data, plan);
+      const hilo = normalizarHilo(data && data.hilo_conductor);
+      if (secciones.length === plan.secciones) return { hilo, secciones };
+
+      const completas = Math.floor(secciones.length / SECCIONES_POR_SEMANA) * SECCIONES_POR_SEMANA;
+      if (completas && (!mejor || completas > mejor.secciones.length)) {
+        mejor = { hilo, secciones: secciones.slice(0, completas) };
+      }
+      console.warn(`Estructura incompleta (intento ${intento}): ${secciones.length}/${plan.secciones} secciones válidas`);
+    } catch (err) {
+      ultimoError = err;
+      console.warn(`Error generando la estructura (intento ${intento}): ${err.causa ? err.causa.message : err.message}`);
     }
-    console.warn(`Estructura incompleta (intento ${intento}): ${secciones.length}/${plan.secciones} secciones válidas`);
   }
-  throw new Error('La estructura del curso llegó incompleta.');
+
+  if (mejor) return mejor;
+  throw new IANoDisponibleError(MENSAJE_IA_SATURADA, ultimoError);
 };
 
 const contextoSeccion = (tema, nivel, plan, seccion, indice, todas, hilo) => {
@@ -311,27 +382,7 @@ Temas de la sección, en este orden:
 ${seccion.temas.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
 };
 
-const normalizarClave = (texto) =>
-  limpiarTexto(texto)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
-const generarTemasSeccion = async (base, plan, seccion, indice, fin) => {
-  const obtenidos = new Array(plan.temas).fill(null);
-
-  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
-    const faltantes = obtenidos.map((t, i) => (t ? -1 : i)).filter((i) => i >= 0);
-    if (!faltantes.length) break;
-
-    const prompt = `${base}
-
-Desarrolla ÚNICAMENTE estos temas de la sección (exactamente ${faltantes.length}, con el mismo título y en este orden):
-${faltantes.map((i) => `${i + 1}. ${seccion.temas[i]}`).join('\n')}
-
-COHERENCIA (lo más importante):
+const reglasTemas = (plan) => `COHERENCIA (lo más importante):
 - Los temas de la sección forman una secuencia: cada uno usa lo que se explicó en el tema anterior y lo menciona de forma natural.
 - Los conceptos de un tema se relacionan entre sí: el segundo y el tercero se apoyan explícitamente en el primero.
 - Todos los ejemplos usan las MISMAS cifras de referencia y continúan el cálculo del tema anterior; si una cifra cambia, explica por qué.
@@ -354,43 +405,110 @@ Reglas OBLIGATORIAS para cada tema:
 - "puente_siguiente": una oración sobre qué queda abierto y que resuelve el siguiente tema (en el último tema, lo que viene en la siguiente sección o el examen).
 - Lenguaje claro y directo. Texto plano, sin Markdown, sin asteriscos ni viñetas.`;
 
+const asignarTemas = (recibidos, faltantes, seccion, plan, obtenidos) => {
+  const libres = [...faltantes];
+  recibidos.forEach((t, k) => {
+    const clave = normalizarClave(t && t.titulo);
+    let destino = libres.find((i) => normalizarClave(seccion.temas[i]) === clave);
+    if (destino === undefined && recibidos.length === faltantes.length) destino = faltantes[k];
+    if (destino === undefined || !libres.includes(destino)) return;
+    const normal = normalizarTema({ ...t, titulo: seccion.temas[destino] }, plan, {
+      esPrimero: destino === 0,
+      conexionSeccion: seccion.conexion,
+    });
+    if (temaUtil(normal)) {
+      obtenidos[destino] = normal;
+      libres.splice(libres.indexOf(destino), 1);
+    }
+  });
+  return libres;
+};
+
+const rescatarTema = async (base, plan, seccion, indice, i, obtenidos, finRescate) => {
+  const previo = i > 0 ? obtenidos[i - 1] : null;
+  const siguiente = i < seccion.temas.length - 1 ? seccion.temas[i + 1] : null;
+  const prompt = `${base}
+
+Desarrolla ÚNICAMENTE el tema ${i + 1}: "${seccion.temas[i]}" (devuelve un arreglo "temas" con exactamente 1 elemento y ese mismo título).
+${previo ? `El tema anterior fue "${previo.titulo}". Lo que el estudiante acaba de aprender: ${previo.contenido.resumen} ${previo.contenido.puente_siguiente}` : ''}
+${siguiente ? `El siguiente tema será "${siguiente}"; deja preparado el terreno para él.` : ''}
+
+${reglasTemas(plan)}`;
+
+  if (restanteHasta(finRescate) < 5000) return;
+  try {
+    const data = await generarJSON(prompt, temasSchema, {
+      etiqueta: `rescate tema ${i + 1} sección ${indice + 1}`,
+      thinking: null,
+      presupuestoMs: restanteHasta(finRescate),
+      timeoutMs: 45000,
+    });
+    const recibidos = Array.isArray(data && data.temas) ? data.temas.slice(0, 1) : [];
+    asignarTemas(recibidos, [i], seccion, plan, obtenidos);
+  } catch (err) {
+    if (!(err instanceof IANoDisponibleError)) {
+      console.warn(`Error en rescate del tema ${i + 1} de la sección ${indice + 1}: ${err.message}`);
+    }
+  }
+};
+
+const reglasExamen = (cantidad, totalTemas, fuente) => `Reglas OBLIGATORIAS del examen (${cantidad} preguntas de opción múltiple):
+- Pregunta SOLO sobre conceptos, definiciones y cálculos que aparecen en ${fuente}. Si algo no está explicado ahí, no lo preguntes.
+- Usa los mismos nombres de conceptos y las mismas cifras de los ejemplos; si haces un cálculo nuevo, que se resuelva con lo explicado y verifica la aritmética antes de responder.
+- Reparte las preguntas entre los ${totalTemas} temas; al menos ${Math.min(4, cantidad)} son casos prácticos con las cifras de los ejemplos y al menos ${Math.min(2, cantidad)} combinan conceptos de temas distintos.
+- "justificacion": una frase breve tomada o parafraseada del contenido que demuestra que la respuesta correcta es la correcta.
+- Cada pregunta con exactamente 4 opciones distintas entre sí con incisos "A", "B", "C" y "D", en ese orden.
+- "respuesta_correcta" es SOLO la letra del inciso correcto ("A", "B", "C" o "D").
+- Solo una opción correcta por pregunta; los distractores son plausibles pero claramente incorrectos según el contenido.
+- No uses opciones como "Todas las anteriores", "Ninguna de las anteriores" ni "A y B".
+- Enunciados y opciones breves. Sin personajes ni nombres propios. Texto plano, sin Markdown.`;
+
+const generarContenidoSeccion = async (base, plan, seccion, indice, fin) => {
+  const obtenidos = new Array(plan.temas).fill(null);
+  const finNormal = fin - RESERVA_RESCATE_MS;
+  const finRescate = fin - RESERVA_EXAMEN_MS;
+  let preguntasIA = [];
+
+  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
+    const faltantes = obtenidos.map((t, i) => (t ? -1 : i)).filter((i) => i >= 0);
+    if (!faltantes.length) break;
+    if (restanteHasta(finNormal) < 8000) break;
+
+    const conExamen = faltantes.length === plan.temas;
+    const prompt = `${base}
+
+${conExamen ? 'PRIMERO, en "temas", desarrolla' : 'Desarrolla ÚNICAMENTE'} estos temas de la sección (exactamente ${faltantes.length}, con el mismo título y en este orden):
+${faltantes.map((i) => `${i + 1}. ${seccion.temas[i]}`).join('\n')}
+
+${reglasTemas(plan)}${conExamen ? `
+
+DESPUÉS, en "preguntas", crea el examen de la sección basándote ÚNICAMENTE en lo que tú mismo escribiste en "temas".
+${reglasExamen(PREGUNTAS_POR_EXAMEN, plan.temas, 'los temas que escribiste')}` : ''}`;
+
     try {
-      const data = await generarJSON(prompt, temasSchema, {
-        etiqueta: `temas sección ${indice + 1}`,
+      const data = await generarJSON(prompt, conExamen ? seccionSchema : temasSchema, {
+        etiqueta: `${conExamen ? 'sección' : 'temas sección'} ${indice + 1}`,
         thinking: THINKING_CONTENIDO,
-        presupuestoMs: restanteHasta(fin),
+        presupuestoMs: restanteHasta(finNormal),
+        timeoutMs: 90000,
       });
       const recibidos = Array.isArray(data && data.temas) ? data.temas : [];
-      const libres = [...faltantes];
-
-      recibidos.forEach((t, k) => {
-        const clave = normalizarClave(t && t.titulo);
-        let destino = libres.find((i) => normalizarClave(seccion.temas[i]) === clave);
-        if (destino === undefined && recibidos.length === faltantes.length) destino = faltantes[k];
-        if (destino === undefined || !libres.includes(destino)) return;
-        const normal = normalizarTema({ ...t, titulo: seccion.temas[destino] }, plan, {
-          esPrimero: destino === 0,
-          conexionSeccion: seccion.conexion,
-        });
-        if (normal && normal.contenido.conceptos.length && normal.contenido.desarrollo.length) {
-          obtenidos[destino] = normal;
-          libres.splice(libres.indexOf(destino), 1);
-        }
-      });
-
+      const libres = asignarTemas(recibidos, faltantes, seccion, plan, obtenidos);
+      if (conExamen && !libres.length && Array.isArray(data.preguntas)) preguntasIA = data.preguntas;
       if (libres.length) {
         console.warn(`Temas incompletos en sección ${indice + 1} (intento ${intento}): faltan ${libres.length}`);
       }
     } catch (err) {
-      if (err instanceof IANoDisponibleError) throw err;
-      console.warn(`Error generando temas de la sección ${indice + 1} (intento ${intento}): ${err.message}`);
+      if (err instanceof IANoDisponibleError) break;
+      console.warn(`Error generando la sección ${indice + 1} (intento ${intento}): ${err.message}`);
     }
   }
 
-  if (obtenidos.some((t) => !t)) {
-    throw new Error(`No se pudieron completar los temas de la sección ${indice + 1}.`);
+  for (let i = 0; i < obtenidos.length; i++) {
+    if (!obtenidos[i]) await rescatarTema(base, plan, seccion, indice, i, obtenidos, finRescate);
   }
-  return obtenidos;
+
+  return { temas: obtenidos.every(Boolean) ? obtenidos : null, preguntasIA };
 };
 
 const resumirContenido = (temas) =>
@@ -409,70 +527,150 @@ ${conceptos}
     })
     .join('\n\n');
 
-const generarExamenSeccion = async (base, seccion, indice, temas, fin) => {
-  const contenido = resumirContenido(temas);
+const recortar = (texto, max = 220) => {
+  const t = limpiarTexto(texto);
+  if (t.length <= max) return t;
+  const corte = t.slice(0, max);
+  const punto = corte.lastIndexOf('. ');
+  return punto > max * 0.5 ? corte.slice(0, punto + 1) : `${corte.slice(0, corte.lastIndexOf(' '))}…`;
+};
 
+const preguntasDeRespaldo = (temas, vistas, faltan) => {
+  const conceptos = [];
+  const bloques = [];
+  const resumenes = [];
+  temas.forEach((t) => {
+    t.contenido.conceptos.forEach((c) => conceptos.push({ tema: t.titulo, titulo: c.titulo, texto: recortar(c.explicacion) }));
+    t.contenido.desarrollo.forEach((b) =>
+      bloques.push({ tema: t.titulo, titulo: b.subtitulo || t.titulo, texto: recortar(b.texto) })
+    );
+    if (t.contenido.resumen) resumenes.push({ tema: t.titulo, titulo: t.titulo, texto: recortar(t.contenido.resumen) });
+  });
+
+  const todos = [...conceptos, ...bloques, ...resumenes];
+  const crear = (item, enunciado, mismoTipo) => {
+    const usados = new Set([normalizarClave(item.texto)]);
+    const distractores = [];
+    for (const otro of [...mezclar(mismoTipo), ...mezclar(todos)]) {
+      const clave = normalizarClave(otro.texto);
+      if (distractores.length >= 3) break;
+      if (!clave || usados.has(clave)) continue;
+      usados.add(clave);
+      distractores.push(otro.texto);
+    }
+    if (distractores.length < 3) return null;
+    const textos = mezclar([item.texto, ...distractores]);
+    const opciones = textos.map((texto, i) => ({ inciso: INCISOS[i], texto }));
+    return {
+      pregunta: enunciado,
+      opciones,
+      respuesta_correcta: INCISOS[textos.indexOf(item.texto)],
+    };
+  };
+
+  const candidatas = [
+    ...mezclar(conceptos).map((c) => crear(c, `¿Qué describe correctamente el concepto «${c.titulo}» del tema «${c.tema}»?`, conceptos)),
+    ...mezclar(resumenes).map((r) => crear(r, `¿Cuál es la idea más importante del tema «${r.tema}»?`, resumenes)),
+    ...mezclar(bloques).map((b) => crear(b, `Dentro del tema «${b.tema}», ¿qué afirmación corresponde a «${b.titulo}»?`, bloques)),
+  ].filter(Boolean);
+
+  const resultado = [];
+  for (const p of candidatas) {
+    if (resultado.length >= faltan) break;
+    const clave = normalizarClave(p.pregunta);
+    if (vistas.has(clave)) continue;
+    vistas.add(clave);
+    resultado.push(p);
+  }
+  return resultado;
+};
+
+const agregarPreguntas = (lista, preguntas, vistas) => {
+  (Array.isArray(lista) ? lista : [])
+    .map(normalizarPregunta)
+    .filter(Boolean)
+    .forEach((p) => {
+      const clave = normalizarClave(p.pregunta);
+      if (preguntas.length < PREGUNTAS_POR_EXAMEN && !vistas.has(clave)) {
+        vistas.add(clave);
+        preguntas.push(p);
+      }
+    });
+};
+
+const generarExamenSeccion = async (base, seccion, indice, temas, fin, preguntasIA) => {
+  const finExamen = fin - RESERVA_GUARDADO_MS;
   const preguntas = [];
   const vistas = new Set();
+  agregarPreguntas(preguntasIA, preguntas, vistas);
 
-  for (let intento = 1; intento <= INTENTOS_POR_PARTE; intento++) {
+  if (preguntas.length < MINIMO_PREGUNTAS_IA && restanteHasta(finExamen) >= 6000) {
     const faltan = PREGUNTAS_POR_EXAMEN - preguntas.length;
-    if (faltan <= 0) break;
-
     const prompt = `${base}
 
 CONTENIDO QUE EL ESTUDIANTE ACABA DE ESTUDIAR (el examen debe basarse ÚNICAMENTE en esto):
-${contenido}
+${resumirContenido(temas)}
 
 Crea ${faltan} preguntas de opción múltiple para el examen de esta sección.
 ${preguntas.length ? `Ya existen estas preguntas, NO las repitas:\n${preguntas.map((p) => `- ${p.pregunta}`).join('\n')}` : ''}
 
-Reglas OBLIGATORIAS:
-- Pregunta SOLO sobre conceptos, definiciones y cálculos que aparecen en el contenido de arriba. Si algo no está explicado ahí, no lo preguntes.
-- Usa los mismos nombres de conceptos y las mismas cifras de los ejemplos; si haces un cálculo nuevo, que se resuelva con lo explicado.
-- Reparte las preguntas entre los ${temas.length} temas; al menos ${Math.min(4, faltan)} son casos prácticos con las cifras de los ejemplos y al menos ${Math.min(2, faltan)} combinan conceptos de temas distintos.
-- La respuesta correcta debe poder justificarse con una frase del contenido.
-- Cada pregunta con exactamente 4 opciones con incisos "A", "B", "C" y "D", en ese orden.
-- "respuesta_correcta" es SOLO la letra del inciso correcto ("A", "B", "C" o "D").
-- Solo una opción correcta por pregunta; distractores plausibles; reparte la respuesta correcta entre los cuatro incisos.
-- Enunciados y opciones breves. Sin personajes ni nombres propios. Texto plano, sin Markdown.`;
+${reglasExamen(faltan, temas.length, 'el contenido de arriba')}`;
 
     try {
       const data = await generarJSON(prompt, examenSchema, {
         etiqueta: `examen sección ${indice + 1}`,
         thinking: THINKING_EXAMEN,
-        presupuestoMs: restanteHasta(fin),
+        presupuestoMs: restanteHasta(finExamen),
+        timeoutMs: 45000,
       });
-      (Array.isArray(data && data.preguntas) ? data.preguntas : [])
-        .map(normalizarPregunta)
-        .filter(Boolean)
-        .forEach((p) => {
-          const clave = normalizarClave(p.pregunta);
-          if (preguntas.length < PREGUNTAS_POR_EXAMEN && !vistas.has(clave)) {
-            vistas.add(clave);
-            preguntas.push(p);
-          }
-        });
-      if (preguntas.length < PREGUNTAS_POR_EXAMEN) {
-        console.warn(`Examen incompleto en sección ${indice + 1} (intento ${intento}): ${preguntas.length}/${PREGUNTAS_POR_EXAMEN}`);
-      }
+      agregarPreguntas(data && data.preguntas, preguntas, vistas);
     } catch (err) {
-      if (err instanceof IANoDisponibleError) throw err;
-      console.warn(`Error generando el examen de la sección ${indice + 1} (intento ${intento}): ${err.message}`);
+      if (!(err instanceof IANoDisponibleError)) {
+        console.warn(`Error generando el examen de la sección ${indice + 1}: ${err.message}`);
+      }
     }
   }
 
   if (preguntas.length < PREGUNTAS_POR_EXAMEN) {
-    throw new Error(`No se pudo completar el examen de la sección ${indice + 1}.`);
+    const extra = preguntasDeRespaldo(temas, vistas, PREGUNTAS_POR_EXAMEN - preguntas.length);
+    if (extra.length) console.warn(`Examen de la sección ${indice + 1} completado con ${extra.length} pregunta(s) del contenido.`);
+    preguntas.push(...extra);
   }
   return preguntas;
 };
 
 const generarSeccion = async (tema, nivel, plan, seccion, indice, todas, hilo, fin) => {
-  const base = contextoSeccion(tema, nivel, plan, seccion, indice, todas, hilo);
-  const temas = await generarTemasSeccion(base, plan, seccion, indice, fin);
-  const preguntas = await generarExamenSeccion(base, seccion, indice, temas, fin);
-  return { ...seccion, temas, preguntas };
+  try {
+    const base = contextoSeccion(tema, nivel, plan, seccion, indice, todas, hilo);
+    const { temas, preguntasIA } = await generarContenidoSeccion(base, plan, seccion, indice, fin);
+    if (!temas) {
+      console.warn(`La sección ${indice + 1} no se pudo completar a tiempo.`);
+      return null;
+    }
+    const preguntas = await generarExamenSeccion(base, seccion, indice, temas, fin, preguntasIA);
+    if (!preguntas.length) return null;
+    return { ...seccion, temas, preguntas };
+  } catch (err) {
+    console.warn(`Falló la sección ${indice + 1}: ${err.message}`);
+    return null;
+  }
+};
+
+const seccionesUtilizables = (resultado) => {
+  const prefijo = [];
+  for (const s of resultado) {
+    if (!s) break;
+    prefijo.push(s);
+  }
+  const completas = Math.floor(prefijo.length / SECCIONES_POR_SEMANA) * SECCIONES_POR_SEMANA;
+  return prefijo.slice(0, completas);
+};
+
+const cerrarCurso = (secciones) => {
+  const ultima = secciones[secciones.length - 1];
+  const ultimoTema = ultima.temas[ultima.temas.length - 1];
+  ultimoTema.contenido.puente_siguiente =
+    'Con esto completas el recorrido de esta guía. Pon a prueba todo lo aprendido en el examen de la sección.';
 };
 
 const guardarCurso = async (id_usuario, idTema, secciones) => {
@@ -594,20 +792,39 @@ exports.generateCourse = async (req, res) => {
 
     const inicio = Date.now();
     const fin = inicio + PRESUPUESTO_TOTAL_MS;
-    const { hilo, secciones: estructura } = await generarEstructura(tema, nivelCurso, plan, fin);
+    const { hilo, secciones: estructura } = await generarEstructura(
+      tema,
+      nivelCurso,
+      plan,
+      Math.min(inicio + LIMITE_ESTRUCTURA_MS, fin)
+    );
 
-    const secciones = await mapConcurrente(estructura, CONCURRENCIA, (sec, i) =>
+    const resultado = await mapConcurrente(estructura, CONCURRENCIA, (sec, i) =>
       generarSeccion(tema, nivelCurso, plan, sec, i, estructura, hilo, fin)
     );
 
+    const secciones = seccionesUtilizables(resultado);
+    if (!secciones.length) throw new IANoDisponibleError();
+
+    const incompleta = secciones.length < plan.secciones;
+    if (incompleta) cerrarCurso(secciones);
+
     const idGuia = await guardarCurso(id_usuario, idTema, secciones);
-    console.log(`Guía ${idGuia} generada en ${Date.now() - inicio} ms (${secciones.length} secciones)`);
+    console.log(
+      `Guía ${idGuia} generada en ${Date.now() - inicio} ms (${secciones.length}/${plan.secciones} secciones)`
+    );
+
+    const semanasGeneradas = secciones.length / SECCIONES_POR_SEMANA;
 
     res.status(201).json({
-      message: 'Guía de estudio generada e insertada correctamente',
+      message: incompleta
+        ? `Tu guía quedó lista con ${semanasGeneradas} de ${plan.semanas} semanas porque la IA estaba muy solicitada.`
+        : 'Guía de estudio generada e insertada correctamente',
       id_guia: idGuia,
+      incompleta,
       curso: {
-        semanas: plan.semanas,
+        semanas: semanasGeneradas,
+        semanas_solicitadas: plan.semanas,
         total_secciones: secciones.length,
         temas_por_seccion: plan.temas,
         preguntas_por_examen: PREGUNTAS_POR_EXAMEN,

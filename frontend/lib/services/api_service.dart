@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'session_service.dart';
 import 'conexion_service.dart';
 
@@ -31,7 +32,7 @@ class ApiService {
 
   static const Duration _tiempoNormal = Duration(seconds: 30);
   static const Duration _tiempoGeneracion = Duration(minutes: 5);
-  static const Duration _tiempoTutor = Duration(seconds: 90);
+  static const Duration _tiempoTutor = Duration(seconds: 75);
 
   static String mensajeDe(Object error, {String porDefecto = ConexionService.mensajeServidor}) =>
       error is ApiException ? error.message : porDefecto;
@@ -50,12 +51,12 @@ class ApiService {
     Future<http.Response> Function() peticion, {
     Duration tiempo = _tiempoNormal,
   }) async {
-    if (!await hayInternet()) {
-      throw const ApiException(ConexionService.mensajeSinInternet);
-    }
     try {
       return await peticion().timeout(tiempo);
     } on TimeoutException {
+      if (!await hayInternet()) {
+        throw const ApiException(ConexionService.mensajeSinInternet);
+      }
       throw const ApiException(ConexionService.mensajeTiempo);
     } catch (_) {
       if (!await hayInternet()) {
@@ -129,6 +130,7 @@ class ApiService {
     token = null;
     currentUser = null;
     await SessionService.clear();
+    await _borrarTutorGuardado();
   }
 
   // 1. REGISTRO DE USUARIO
@@ -359,6 +361,8 @@ class ApiService {
           'success': true,
           'message': data['message'] ?? 'Curso generado exitosamente',
           'id_guia': data['id_guia'],
+          'incompleta': data['incompleta'] == true,
+          'semanas': data['curso'] is Map ? data['curso']['semanas'] : null,
         };
       }
       if (await _sesionInvalida(response)) {
@@ -454,6 +458,26 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getLastAttempt(int examId) async {
+    try {
+      final response = await _enviar(() => http.get(
+            Uri.parse('$baseUrl/exam/$examId/last-attempt'),
+            headers: _headers(),
+          ));
+      final data = _json(response);
+      if (response.statusCode == 200) return {'success': true, 'data': data};
+      if (await _sesionInvalida(response)) {
+        return {'success': false, 'message': mensajeSesionExpirada};
+      }
+      return {
+        'success': false,
+        'message': _mensaje(response, data, 'No se pudieron cargar tus resultados. Inténtalo de nuevo.'),
+      };
+    } on ApiException catch (e) {
+      return {'success': false, 'message': e.message, 'conexion': true};
+    }
+  }
+
   static Future<Map<String, dynamic>> completeSectionExam(
       int examId, List<Map<String, dynamic>> respuestas) async {
     try {
@@ -537,23 +561,129 @@ class ApiService {
     return res['respuesta']?.toString() ?? '';
   }
 
+  static const String _prefijoTutor = 'ul_tutor_';
+  static const String _indiceTutor = 'ul_tutor_indice';
+  static const int _maxTutorGuardados = 40;
+  static final Map<String, Map<String, dynamic>> _tutorMemoria = {};
+  static final Map<String, Future<Map<String, dynamic>>> _tutorEnCurso = {};
+
+  static String _claveTutor(List<Map<String, dynamic>> errores) {
+    final usuario = currentUser?['id_usuario'] ?? currentUser?['correo'] ?? 'anonimo';
+    final texto = [
+      '$usuario',
+      for (final e in errores)
+        [
+          e['id_pregunta'] ?? '',
+          e['pregunta'] ?? e['texto_pregunta'] ?? '',
+          e['respuesta_usuario'] ?? '',
+          e['respuesta_correcta'] ?? '',
+        ].join('|'),
+    ].join('\n');
+    var hash = 0x811c9dc5;
+    for (final unidad in utf8.encode(texto)) {
+      hash ^= unidad;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return '$_prefijoTutor${hash.toRadixString(16)}_${texto.length}';
+  }
+
+  static Future<void> _borrarTutorGuardado() async {
+    _tutorMemoria.clear();
+    _tutorEnCurso.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final clave in prefs.getStringList(_indiceTutor) ?? const <String>[]) {
+        await prefs.remove(clave);
+      }
+      await prefs.remove(_indiceTutor);
+    } catch (_) {}
+  }
+
+  static Map<String, dynamic>? tutorGuardado(List<Map<String, dynamic>> errores) =>
+      _tutorMemoria[_claveTutor(errores)];
+
+  static Future<void> cargarTutorGuardado(List<Map<String, dynamic>> errores) async {
+    if (errores.isEmpty) return;
+    await _leerTutorGuardado(_claveTutor(errores));
+  }
+
+  static Future<Map<String, dynamic>?> _leerTutorGuardado(String clave) async {
+    final enMemoria = _tutorMemoria[clave];
+    if (enMemoria != null) return enMemoria;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(clave);
+      if (raw == null) return null;
+      final data = jsonDecode(raw);
+      if (data is! Map || data['fundamentos'] is! Map) return null;
+      final Map<String, dynamic> resultado = {
+        'fundamentos': Map<String, dynamic>.from(data['fundamentos'] as Map),
+        'respuesta': data['respuesta']?.toString() ?? '',
+      };
+      _tutorMemoria[clave] = resultado;
+      return resultado;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _guardarTutor(String clave, Map<String, dynamic> resultado) async {
+    _tutorMemoria[clave] = resultado;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(clave, jsonEncode(resultado));
+      final indice = List<String>.of(prefs.getStringList(_indiceTutor) ?? const <String>[])
+        ..remove(clave)
+        ..add(clave);
+      while (indice.length > _maxTutorGuardados) {
+        await prefs.remove(indice.removeAt(0));
+      }
+      await prefs.setStringList(_indiceTutor, indice);
+    } catch (_) {}
+  }
+
   /// Tutor IA con respuesta estructurada.
   /// Devuelve {'fundamentos': Map? , 'respuesta': String}.
   static Future<Map<String, dynamic>> askAiTutorDetallado({
     required List<Map<String, dynamic>> examenCompleto,
     required List<Map<String, dynamic>> errores,
   }) async {
+    final clave = _claveTutor(errores);
+    final guardado = await _leerTutorGuardado(clave);
+    if (guardado != null) return guardado;
+
+    final enCurso = _tutorEnCurso[clave];
+    if (enCurso != null) return enCurso;
+
+    final futuro = _pedirTutor(clave, examenCompleto, errores);
+    _tutorEnCurso[clave] = futuro;
+    try {
+      return await futuro;
+    } finally {
+      _tutorEnCurso.remove(clave);
+    }
+  }
+
+  static Future<Map<String, dynamic>> _pedirTutor(
+    String clave,
+    List<Map<String, dynamic>> examenCompleto,
+    List<Map<String, dynamic>> errores,
+  ) async {
     final data = await _consultarTutor(
       prompt: 'Fundamento teórico de los errores del examen',
       examenCompleto: examenCompleto,
       errores: errores,
     );
-    return {
+    final Map<String, dynamic> resultado = {
       'fundamentos': data['fundamentos'] is Map
           ? Map<String, dynamic>.from(data['fundamentos'])
           : null,
       'respuesta': data['respuesta']?.toString() ?? '',
     };
+    if (resultado['fundamentos'] != null && data['fuente'] != 'contenido') {
+      await _guardarTutor(clave, resultado);
+    }
+    return resultado;
   }
 
   static Future<Map<String, dynamic>> _consultarTutor({

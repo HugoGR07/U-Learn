@@ -6,6 +6,8 @@ import '../widgets/efectos_animados.dart';
 import 'fundamentos_view.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/componentes_guia.dart';
+import '../widgets/ruta_suave.dart';
+import '../services/api_service.dart';
 
 class ResultView extends StatefulWidget {
   final int totalPreguntas;
@@ -135,6 +137,7 @@ class _ResultViewState extends State<ResultView> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    ApiService.cargarTutorGuardado(widget.erroresDelExamen);
     _ambient = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
@@ -158,8 +161,8 @@ class _ResultViewState extends State<ResultView> with SingleTickerProviderStateM
   void _abrirFundamentos() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => FundamentosView(
+      RutaSuave(
+        page: FundamentosView(
           errores: widget.erroresDelExamen,
           examenCompleto: widget.examenCompleto,
         ),
@@ -461,11 +464,15 @@ class _ResultViewState extends State<ResultView> with SingleTickerProviderStateM
                   curve: Curves.easeOut,
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: _filtro == opciones[i].filtro ? Colors.white : Colors.transparent,
+                    color: _filtro == opciones[i].filtro ? Colors.white : Colors.white.withValues(alpha: 0),
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: _filtro == opciones[i].filtro
-                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))]
-                        : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: _filtro == opciones[i].filtro ? 0.06 : 0),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

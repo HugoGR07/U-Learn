@@ -13,4 +13,6 @@ router.get('/:examId/questions', authMiddleware, examController.getExamQuestions
 // Enviar respuestas y calificar
 router.post('/:examId/submit', authMiddleware, examController.submitExam);
 
+router.get('/:examId/last-attempt', authMiddleware, examController.getLastAttempt);
+
 module.exports = router;

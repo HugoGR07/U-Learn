@@ -84,8 +84,18 @@ class TextoConDinero extends StatelessWidget {
 class Aparecer extends StatefulWidget {
   final int orden;
   final Widget child;
+  final Duration duracion;
+  final int pasoMs;
+  final double desplazamiento;
 
-  const Aparecer({super.key, required this.orden, required this.child});
+  const Aparecer({
+    super.key,
+    required this.orden,
+    required this.child,
+    this.duracion = const Duration(milliseconds: 520),
+    this.pasoMs = 70,
+    this.desplazamiento = 24,
+  });
 
   @override
   State<Aparecer> createState() => _AparecerState();
@@ -98,9 +108,9 @@ class _AparecerState extends State<Aparecer> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 520));
+    _c = AnimationController(vsync: this, duration: widget.duracion);
     _a = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-    Future.delayed(Duration(milliseconds: 70 * widget.orden.clamp(0, 10)), () {
+    Future.delayed(Duration(milliseconds: widget.pasoMs * widget.orden.clamp(0, 10)), () {
       if (mounted) _c.forward();
     });
   }
@@ -119,7 +129,7 @@ class _AparecerState extends State<Aparecer> with SingleTickerProviderStateMixin
       builder: (context, child) => Opacity(
         opacity: _a.value,
         child: Transform.translate(
-          offset: Offset(0, 24 * (1 - _a.value)),
+          offset: Offset(0, widget.desplazamiento * (1 - _a.value)),
           child: Transform.scale(scale: 0.97 + 0.03 * _a.value, child: child),
         ),
       ),

@@ -46,22 +46,24 @@ class _FlotanteState extends State<Flotante> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      child: widget.child,
-      builder: (context, child) {
-        final t = _c.value * 2 * math.pi + widget.fase;
-        return Transform.translate(
-          offset: Offset(0, math.sin(t) * widget.amplitud),
-          child: Transform.rotate(
-            angle: math.sin(t) * widget.rotacion,
-            child: Transform.scale(
-              scale: 1 + math.cos(t) * widget.escala,
-              child: child,
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _c,
+        child: widget.child,
+        builder: (context, child) {
+          final t = _c.value * 2 * math.pi + widget.fase;
+          return Transform.translate(
+            offset: Offset(0, math.sin(t) * widget.amplitud),
+            child: Transform.rotate(
+              angle: math.sin(t) * widget.rotacion,
+              child: Transform.scale(
+                scale: 1 + math.cos(t) * widget.escala,
+                child: child,
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -109,7 +111,8 @@ class _BrilloDeslizanteState extends State<BrilloDeslizante>
           widget.child,
           Positioned.fill(
             child: IgnorePointer(
-              child: AnimatedBuilder(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
                 animation: _c,
                 builder: (context, _) {
                   final p = (_c.value / 0.5).clamp(0.0, 1.0);
@@ -131,6 +134,7 @@ class _BrilloDeslizanteState extends State<BrilloDeslizante>
                     ),
                   );
                 },
+                ),
               ),
             ),
           ),

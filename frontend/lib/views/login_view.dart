@@ -5,6 +5,7 @@ import 'forgotpss_view.dart';
 import 'courses_view.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -55,7 +56,7 @@ class _LoginViewState extends State<LoginView> {
       // (El mensaje de bienvenida ya se muestra automáticamente allá durante 3 segundos)
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const CoursesView()),
+        RutaSuave(page: const CoursesView()),
         (route) => false,
       );
     } else {
@@ -266,7 +267,7 @@ class _LoginViewState extends State<LoginView> {
                       if (!_pantallaLista) return;
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const ForgotpssView()),
+                        RutaSuave(page: const ForgotpssView()),
                       );
                     },
                     style: TextButton.styleFrom(
@@ -334,7 +335,7 @@ class _LoginViewState extends State<LoginView> {
                         if (!_pantallaLista) return;
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (context) => const RegisterView()),
+                          RutaSuave(page: const RegisterView()),
                         );
                       },
                       child: const Text(

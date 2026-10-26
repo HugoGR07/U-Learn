@@ -41,6 +41,11 @@ class _LessonViewState extends State<LessonView> {
 
   late int _index;
   bool _busy = false;
+  bool _haciaAdelante = true;
+  final Map<int, Map<String, dynamic>?> _estructuras = {};
+
+  Map<String, dynamic>? _estructura(int i) =>
+      _estructuras.putIfAbsent(i, () => _parseContenido(widget.lessons[i]['contenido']));
   final ScrollController _scroll = ScrollController();
 
   @override
@@ -118,7 +123,11 @@ class _LessonViewState extends State<LessonView> {
   }
 
   void _goTo(int index) {
-    setState(() => _index = index);
+    if (index < 0 || index >= widget.lessons.length || index == _index) return;
+    setState(() {
+      _haciaAdelante = index > _index;
+      _index = index;
+    });
     _registrarVisto(index);
     if (_scroll.hasClients) {
       _scroll.animateTo(
@@ -154,23 +163,23 @@ class _LessonViewState extends State<LessonView> {
 
     if (!mounted) return;
     setState(() => _busy = true);
-    if (!await ApiService.hayInternet()) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      AlertaFlotante.mostrar(
-        context,
-        titulo: 'Sin conexión',
-        mensaje: ConexionService.mensajeSinInternet,
-        tipo: TipoAlerta.sinConexion,
-      );
-      return;
-    }
     final ok = await _asegurarCompleta();
     if (!mounted) return;
     if (ok) {
       Navigator.pop(context, widget.tieneExamen ? 'examen' : true);
     } else {
+      final conInternet = await ApiService.hayInternet();
+      if (!mounted) return;
       setState(() => _busy = false);
+      if (!conInternet) {
+        AlertaFlotante.mostrar(
+          context,
+          titulo: 'Sin conexión',
+          mensaje: ConexionService.mensajeSinInternet,
+          tipo: TipoAlerta.sinConexion,
+        );
+        return;
+      }
       AlertaFlotante.mostrar(
         context,
         titulo: 'No se guardó tu avance',
@@ -185,7 +194,7 @@ class _LessonViewState extends State<LessonView> {
     final currentLesson = widget.lessons[_index];
     final totalLessons = widget.lessons.length;
     final bool isLast = _index == totalLessons - 1;
-    final estructura = _parseContenido(currentLesson['contenido']);
+    final estructura = _estructura(_index);
     final horizontal = context.esHorizontal;
 
     return PopScope(
@@ -280,13 +289,39 @@ class _LessonViewState extends State<LessonView> {
                 ),
               ),
               Expanded(
-                child: SingleChildScrollView(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: _busy
+                      ? null
+                      : (detalles) {
+                          final v = detalles.primaryVelocity ?? 0;
+                          if (v < -350 && !isLast) _goTo(_index + 1);
+                          if (v > 350 && _index > 0) _goTo(_index - 1);
+                        },
+                  child: SingleChildScrollView(
                   controller: _scroll,
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: AnchoMaximo(
                     maximo: 760,
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
+                      duration: const Duration(milliseconds: 280),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        final entra = child.key == ValueKey(_index);
+                        final desde = (_haciaAdelante == entra) ? 0.12 : -0.12;
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: Tween<Offset>(begin: Offset(desde, 0), end: Offset.zero).animate(animation),
+                            child: child,
+                          ),
+                        );
+                      },
+                      layoutBuilder: (actual, previos) => Stack(
+                        alignment: Alignment.topCenter,
+                        children: [...previos, if (actual != null) actual],
+                      ),
                       child: Column(
                         key: ValueKey(_index),
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,6 +358,7 @@ class _LessonViewState extends State<LessonView> {
                       ),
                     ),
                   ),
+                ),
                 ),
               ),
 

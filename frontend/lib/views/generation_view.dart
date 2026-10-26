@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
@@ -24,6 +25,7 @@ class GenerationView extends StatefulWidget {
 class _GenerationgGuideViewState extends State<GenerationView> {
   double _progress = 0.0;
   Timer? _timer;
+  DateTime _inicio = DateTime.now();
   String _errorMessage = '';
 
   @override
@@ -40,16 +42,14 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
   /// Inicia el temporizador de progreso visual y dispara la petición al backend en paralelo
   void _startGeneratingCourse() {
+    _inicio = DateTime.now();
+    _timer?.cancel();
     // 1. Simulación progresiva del % para feedback visual del usuario
     _timer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
       if (!mounted) return;
-
+      final segundos = DateTime.now().difference(_inicio).inMilliseconds / 1000;
       setState(() {
-        if (_progress < 0.60) {
-          _progress += 0.012;
-        } else if (_progress < 0.97) {
-          _progress += (0.97 - _progress) * 0.012;
-        }
+        _progress = math.max(_progress, 0.99 * (1 - math.exp(-segundos / 40)));
       });
     });
 
@@ -65,10 +65,11 @@ class _GenerationgGuideViewState extends State<GenerationView> {
     );
 
     if (response['success'] == true) {
-      final semanas = widget.duracionSemanas == 1 ? '1 semana' : '${widget.duracionSemanas} semanas';
+      final int semanasReales = int.tryParse(response['semanas']?.toString() ?? '') ?? widget.duracionSemanas;
+      final semanas = semanasReales == 1 ? '1 semana' : '$semanasReales semanas';
       NotificationService.showProgress(
         'Tu guía está lista 🎉',
-        '«${widget.selectedTopic}» (nivel ${widget.nivel.toLowerCase()}, $semanas) ya está en tus cursos.',
+        '«${widget.selectedTopic}» ($semanas) ya está en tus cursos.',
       );
       NotificationService.refreshReminder();
     }
@@ -80,7 +81,17 @@ class _GenerationgGuideViewState extends State<GenerationView> {
       _timer?.cancel();
       setState(() => _progress = 1.0);
 
-      await Future.delayed(const Duration(milliseconds: 600));
+      if (response['incompleta'] == true) {
+        await AlertaFlotante.mostrar(
+          context,
+          titulo: 'Tu guía está lista',
+          mensaje: response['message']?.toString() ?? 'Tu guía se generó con menos semanas de las solicitadas.',
+          tipo: TipoAlerta.info,
+          textoBoton: 'Entendido',
+        );
+      } else {
+        await Future.delayed(const Duration(milliseconds: 600));
+      }
 
       if (mounted) {
         // Cierra la pantalla de carga y vuelve a Cursos
@@ -171,7 +182,9 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
       // Subtítulo
       Text(
-        'La IA está generando un plan de estudio sobre "${widget.selectedTopic}".',
+        _errorMessage.isEmpty && DateTime.now().difference(_inicio).inSeconds >= 75
+            ? 'Estamos afinando los últimos detalles para que los temas y los exámenes queden coherentes. Ya casi termina.'
+            : 'La IA está generando un plan de estudio sobre "${widget.selectedTopic}".',
         textAlign: TextAlign.center,
         style: const TextStyle(
           fontSize: 14,

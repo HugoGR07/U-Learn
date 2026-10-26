@@ -15,12 +15,18 @@ const entero = (valor, defecto) => {
   return Number.isFinite(n) && n > 0 ? n : defecto;
 };
 
-const TIMEOUT_MODELO_MS = entero(process.env.GEMINI_TIMEOUT_MS, 120000);
-const PRESUPUESTO_MS = entero(process.env.GEMINI_PRESUPUESTO_MS, 240000);
-const ESPERA_MAXIMA_MS = entero(process.env.GEMINI_ESPERA_MAX_MS, 20000);
+const TIMEOUT_MODELO_MS = entero(process.env.GEMINI_TIMEOUT_MS, 60000);
+const PRESUPUESTO_MS = entero(process.env.GEMINI_PRESUPUESTO_MS, 90000);
+const ESPERA_MAXIMA_MS = entero(process.env.GEMINI_ESPERA_MAX_MS, 30000);
 const RONDAS_MAXIMAS = entero(process.env.GEMINI_RONDAS, 3);
-const MAX_SIMULTANEAS = entero(process.env.GEMINI_MAX_SIMULTANEAS, 24);
-const ESPERA_COLA_MS = entero(process.env.GEMINI_ESPERA_COLA_MS, 90000);
+const MAX_SIMULTANEAS = entero(process.env.GEMINI_MAX_SIMULTANEAS, 32);
+const ESPERA_COLA_MS = entero(process.env.GEMINI_ESPERA_COLA_MS, 30000);
+const RESPALDO_MS = entero(process.env.GEMINI_RESPALDO_MS, 60000);
+const MAX_PARALELAS = entero(process.env.GEMINI_MAX_PARALELAS, 2);
+const RPM_POR_MODELO = entero(process.env.GEMINI_RPM, 10);
+const VENTANA_RPM_MS = 60 * 1000;
+const LENTO_MS = entero(process.env.GEMINI_LENTO_MS, 45000);
+const CASTIGO_LENTO_MS = 5 * 60 * 1000;
 
 const BLOQUEO_CUOTA_MS = 60 * 1000;
 const BLOQUEO_CUOTA_DIARIA_MS = 60 * 60 * 1000;
@@ -112,6 +118,12 @@ const soltarTurno = () => {
 const bloqueosPar = new Map();
 const bloqueosLlave = new Map();
 const bloqueosModelo = new Map();
+const modelosSinThinking = new Set();
+const usos = new Map();
+const modelosLentos = new Map();
+
+const marcarLento = (modelo) => modelosLentos.set(modelo, Date.now() + CASTIGO_LENTO_MS);
+const esLento = (modelo) => (modelosLentos.get(modelo) || 0) > Date.now();
 let turno = 0;
 
 if (!LLAVES.length) {
@@ -124,11 +136,26 @@ const ahora = () => Date.now();
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 const clavePar = (llave, modelo) => `${llave}|${modelo}`;
 
+const liberaLimite = (llave, modelo) => {
+  const lista = usos.get(clavePar(llave, modelo));
+  if (!lista) return 0;
+  const t = ahora();
+  while (lista.length && lista[0] <= t - VENTANA_RPM_MS) lista.shift();
+  return lista.length >= RPM_POR_MODELO ? lista[0] + VENTANA_RPM_MS : 0;
+};
+
+const registrarUso = (llave, modelo) => {
+  const clave = clavePar(llave, modelo);
+  if (!usos.has(clave)) usos.set(clave, []);
+  usos.get(clave).push(ahora());
+};
+
 const bloqueadoHasta = (llave, modelo) =>
   Math.max(
     bloqueosPar.get(clavePar(llave, modelo)) || 0,
     bloqueosLlave.get(llave) || 0,
-    bloqueosModelo.get(modelo) || 0
+    bloqueosModelo.get(modelo) || 0,
+    liberaLimite(llave, modelo)
   );
 
 const bloquear = (mapa, clave, ms) => {
@@ -204,7 +231,8 @@ const candidatosDisponibles = () => {
   const t = ahora();
   const orden = LLAVES.map((_, k) => (inicio + k) % LLAVES.length).sort((a, b) => enCurso[a] - enCurso[b]);
   const lista = [];
-  for (const modelo of MODELOS) {
+  const ordenModelos = [...MODELOS.filter((m) => !esLento(m)), ...MODELOS.filter(esLento)];
+  for (const modelo of ordenModelos) {
     for (const llave of orden) {
       if (bloqueadoHasta(llave, modelo) <= t) lista.push({ llave, modelo });
     }
@@ -222,7 +250,14 @@ const proximoDesbloqueo = () => {
   return minimo;
 };
 
-const llamar = async ({ llave, modelo, contents, config, thinking, timeoutMs }) => {
+const senalCombinada = (controlador, timeoutMs) => {
+  const tiempo = AbortSignal.timeout(Math.max(timeoutMs, 1000));
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([controlador.signal, tiempo]);
+  tiempo.addEventListener('abort', () => controlador.abort(tiempo.reason), { once: true });
+  return controlador.signal;
+};
+
+const llamar = async ({ llave, modelo, contents, config, thinking, timeoutMs, controlador }) => {
   enCurso[llave]++;
   try {
     return await clientes[llave].models.generateContent({
@@ -230,7 +265,7 @@ const llamar = async ({ llave, modelo, contents, config, thinking, timeoutMs }) 
       contents,
       config: {
         ...config,
-        abortSignal: AbortSignal.timeout(timeoutMs),
+        abortSignal: senalCombinada(controlador, timeoutMs),
         ...(thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}),
       },
     });
@@ -241,7 +276,9 @@ const llamar = async ({ llave, modelo, contents, config, thinking, timeoutMs }) 
 
 const generarContenido = async (opciones) => {
   if (!LLAVES.length) throw new IANoDisponibleError();
-  const limite = ahora() + (opciones.presupuestoMs || PRESUPUESTO_MS);
+  const presupuesto = opciones.presupuestoMs || PRESUPUESTO_MS;
+  if (presupuesto < 3000) throw new IANoDisponibleError();
+  const limite = ahora() + presupuesto;
   await tomarTurno(limite);
   try {
     return await ejecutarCascada({ ...opciones, limite });
@@ -250,41 +287,135 @@ const generarContenido = async (opciones) => {
   }
 };
 
-const ejecutarCascada = async ({
+const ejecutarCascada = ({
   contents,
   config = {},
   thinking = null,
   procesar = (texto) => texto,
   limite,
   etiqueta = 'IA',
-}) => {
-  let ultimoError = null;
+  timeoutMs = TIMEOUT_MODELO_MS,
+  respaldoMs = RESPALDO_MS,
+  maxParalelas = MAX_PARALELAS,
+}) =>
+  new Promise((resolve, reject) => {
+    let terminado = false;
+    let ultimoError = null;
+    let ronda = 1;
+    let intentados = new Set();
+    let temporizadorRespaldo = null;
+    let temporizadorLimite = null;
+    let temporizadorEspera = null;
+    const enVuelo = new Map();
+    const inicioCascada = ahora();
 
-  for (let ronda = 1; ronda <= RONDAS_MAXIMAS; ronda++) {
-    const candidatos = candidatosDisponibles();
+    const limpiar = () => {
+      terminado = true;
+      clearTimeout(temporizadorRespaldo);
+      clearTimeout(temporizadorLimite);
+      clearTimeout(temporizadorEspera);
+      for (const c of enVuelo.values()) c.abort();
+      enVuelo.clear();
+    };
 
-    for (const { llave, modelo } of candidatos) {
-      if (bloqueadoHasta(llave, modelo) > ahora()) continue;
+    const fallar = () => {
+      if (terminado) return;
+      limpiar();
+      reject(new IANoDisponibleError(MENSAJE_IA_SATURADA, ultimoError));
+    };
 
-      let usarThinking = thinking;
-      for (let intento = 0; intento < 2; intento++) {
-        const restante = limite - ahora();
-        if (restante < 3000) throw new IANoDisponibleError(MENSAJE_IA_SATURADA, ultimoError);
+    const exito = (valor) => {
+      if (terminado) return;
+      limpiar();
+      resolve(valor);
+    };
 
-        try {
-          const inicio = ahora();
-          const respuesta = await llamar({
-            llave,
-            modelo,
-            contents,
-            config,
-            thinking: usarThinking,
-            timeoutMs: Math.min(TIMEOUT_MODELO_MS, restante),
-          });
+    temporizadorLimite = setTimeout(() => {
+      if (terminado) return;
+      const segundos = Math.round((ahora() - inicioCascada) / 1000);
+      console.warn(
+        `[Gemini] ${etiqueta}: se agotó el tiempo disponible (${segundos}s)${enVuelo.size ? `; se cancelaron ${enVuelo.size} solicitud(es) en curso` : ''}.`
+      );
+      if (!ultimoError) ultimoError = new Error(`Sin respuesta en ${segundos}s`);
+      fallar();
+    }, Math.max(limite - ahora(), 0));
+
+    const siguienteCandidato = () => {
+      const t = ahora();
+      const libres = candidatosDisponibles().filter(
+        ({ llave, modelo }) =>
+          !intentados.has(clavePar(llave, modelo)) &&
+          !enVuelo.has(clavePar(llave, modelo)) &&
+          bloqueadoHasta(llave, modelo) <= t
+      );
+      const modelosEnVuelo = new Set([...enVuelo.keys()].map((k) => k.split('|')[1]));
+      return libres.find(({ modelo }) => !modelosEnVuelo.has(modelo)) || libres[0];
+    };
+
+    const programarRespaldo = () => {
+      clearTimeout(temporizadorRespaldo);
+      if (terminado || enVuelo.size >= maxParalelas) return;
+      temporizadorRespaldo = setTimeout(() => {
+        if (terminado || enVuelo.size >= maxParalelas) return;
+        if (limite - ahora() < 8000) return;
+        for (const clave of enVuelo.keys()) marcarLento(clave.split('|')[1]);
+        if (lanzar()) console.log(`[Gemini] ${etiqueta}: respuesta lenta, se lanzó una solicitud de respaldo.`);
+      }, respaldoMs);
+    };
+
+    const reabastecer = () => {
+      if (terminado) return;
+      if (enVuelo.size < maxParalelas && lanzar()) return;
+      if (enVuelo.size > 0) {
+        programarRespaldo();
+        return;
+      }
+
+      if (ronda >= RONDAS_MAXIMAS) return fallar();
+      const espera = proximoDesbloqueo() - ahora();
+      const restante = limite - ahora();
+      if (!Number.isFinite(espera) || espera > ESPERA_MAXIMA_MS || espera + 3000 > restante) return fallar();
+      ronda++;
+      intentados = new Set();
+      temporizadorEspera = setTimeout(reabastecer, Math.max(espera, 0) + 300 + Math.floor(Math.random() * 700));
+    };
+
+    const lanzar = (forzado = null, sinThinking = false) => {
+      if (terminado || enVuelo.size >= maxParalelas) return false;
+      const restante = limite - ahora();
+      if (restante < 3000) {
+        if (!enVuelo.size) fallar();
+        return false;
+      }
+      const cand = forzado || siguienteCandidato();
+      if (!cand) return false;
+
+      const { llave, modelo } = cand;
+      const clave = clavePar(llave, modelo);
+      intentados.add(clave);
+      const controlador = new AbortController();
+      enVuelo.set(clave, controlador);
+      const usarThinking = sinThinking || modelosSinThinking.has(modelo) ? null : thinking;
+      const inicio = ahora();
+      registrarUso(llave, modelo);
+
+      llamar({
+        llave,
+        modelo,
+        contents,
+        config,
+        thinking: usarThinking,
+        timeoutMs: Math.min(timeoutMs, restante),
+        controlador,
+      })
+        .then((respuesta) => {
+          if (terminado) return;
+          enVuelo.delete(clave);
           const texto = respuesta && respuesta.text;
           if (!texto) {
             ultimoError = new Error('Respuesta vacía');
-            break;
+            console.warn(`[Gemini] ${etiqueta}: ${modelo} (llave #${llave + 1}) devolvió una respuesta vacía.`);
+            return reabastecer();
           }
           let valor;
           try {
@@ -292,38 +423,44 @@ const ejecutarCascada = async ({
           } catch (errProcesar) {
             ultimoError = errProcesar;
             console.warn(`[Gemini] ${etiqueta}: ${modelo} (llave #${llave + 1}) devolvió un formato inválido.`);
-            break;
+            return reabastecer();
           }
-          console.log(`[Gemini] ${etiqueta}: ${modelo} (llave #${llave + 1}) respondió en ${ahora() - inicio} ms`);
-          return valor;
-        } catch (err) {
+          const duracion = ahora() - inicio;
+          if (duracion > LENTO_MS) marcarLento(modelo);
+          else modelosLentos.delete(modelo);
+          console.log(`[Gemini] ${etiqueta}: ${modelo} (llave #${llave + 1}) respondió en ${duracion} ms`);
+          exito(valor);
+        })
+        .catch((err) => {
+          if (terminado) return;
+          enVuelo.delete(clave);
           ultimoError = err;
           const info = clasificarError(err);
           console.warn(
-            `[Gemini] ${etiqueta}: falló ${modelo} (llave #${llave + 1}) -> ${info.tipo}${info.esperaMs ? ` ${Math.round(info.esperaMs / 1000)}s` : ''}`
+            `[Gemini] ${etiqueta}: falló ${modelo} (llave #${llave + 1}) tras ${Math.round((ahora() - inicio) / 1000)}s -> ${info.tipo}${info.esperaMs ? ` (bloqueado ${Math.round(info.esperaMs / 1000)}s)` : ''}${info.tipo === 'desconocido' || info.tipo === 'peticion' ? `: ${String(err && err.message).slice(0, 160)}` : ''}`
           );
           if (info.tipo === 'peticion' && usarThinking) {
-            usarThinking = null;
-            continue;
+            modelosSinThinking.add(modelo);
+            intentados.delete(clave);
+            if (lanzar(cand, true)) return;
           }
+          if (info.tipo === 'tiempo') marcarLento(modelo);
           aplicarBloqueo(llave, modelo, info);
-          break;
-        }
-      }
-    }
+          reabastecer();
+        });
 
-    if (ronda === RONDAS_MAXIMAS) break;
+      programarRespaldo();
+      return true;
+    };
 
-    const espera = proximoDesbloqueo() - ahora();
-    const restante = limite - ahora();
-    if (!Number.isFinite(espera) || espera > ESPERA_MAXIMA_MS || espera + 3000 > restante) break;
-    await dormir(Math.max(espera, 0) + 300 + Math.floor(Math.random() * 700));
-  }
+    reabastecer();
+  });
 
-  throw new IANoDisponibleError(MENSAJE_IA_SATURADA, ultimoError);
-};
-
-const generarJSON = (prompt, schema, { thinking = ThinkingLevel.LOW, etiqueta = 'JSON', presupuestoMs } = {}) =>
+const generarJSON = (
+  prompt,
+  schema,
+  { thinking = ThinkingLevel.LOW, etiqueta = 'JSON', presupuestoMs, timeoutMs, respaldoMs, validar } = {}
+) =>
   generarContenido({
     contents: prompt,
     config: {
@@ -331,9 +468,15 @@ const generarJSON = (prompt, schema, { thinking = ThinkingLevel.LOW, etiqueta = 
       ...(schema ? { responseSchema: schema } : {}),
     },
     thinking,
-    procesar: (texto) => JSON.parse(texto),
+    procesar: (texto) => {
+      const data = JSON.parse(texto);
+      if (validar && !validar(data)) throw new Error('JSON incompleto');
+      return data;
+    },
     etiqueta,
     presupuestoMs,
+    timeoutMs,
+    respaldoMs,
   });
 
 const estadoCascada = () => {

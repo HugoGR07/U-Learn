@@ -5,11 +5,13 @@ import '../services/api_service.dart';
 import '../services/progreso_local_service.dart';
 import 'lesson_view.dart';
 import 'exam_view.dart';
+import 'result_view.dart';
 import '../widgets/encabezado_azul.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/componentes_guia.dart';
 import '../widgets/efectos_animados.dart';
+import '../widgets/ruta_suave.dart';
 
 class StudyView extends StatefulWidget {
   final int idGuia;
@@ -62,7 +64,8 @@ class _StudyViewState extends State<StudyView>
 
   Widget _shimmer() {
     return IgnorePointer(
-      child: AnimatedBuilder(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
         animation: _floatController,
         builder: (context, _) {
           final t = (_floatController.value * 1.6).clamp(0.0, 1.0);
@@ -82,14 +85,20 @@ class _StudyViewState extends State<StudyView>
             ),
           );
         },
+        ),
       ),
     );
   }
 
-  Future<void> _fetchCourseDetails() async {
-    setState(() => _isLoading = true);
+  bool _cargandoDetalles = false;
+
+  Future<void> _fetchCourseDetails({bool silencioso = false}) async {
+    if (_cargandoDetalles) return;
+    _cargandoDetalles = true;
+    if (_secciones.isEmpty) setState(() => _isLoading = true);
 
     final res = await ApiService.getGuideDetails(widget.idGuia);
+    _cargandoDetalles = false;
 
     if (!mounted) return;
 
@@ -112,6 +121,7 @@ class _StudyViewState extends State<StudyView>
       });
     } else {
       setState(() => _isLoading = false);
+      if (silencioso && _secciones.isNotEmpty) return;
       AlertaFlotante.mostrar(
         context,
         titulo: 'No se pudo cargar tu guía',
@@ -122,12 +132,24 @@ class _StudyViewState extends State<StudyView>
   }
 
   Future<Map<int, Set<int>>> _leerVistos(List<dynamic> secciones) async {
-    final mapa = <int, Set<int>>{};
-    for (final sec in secciones) {
-      final id = sec is Map ? sec['id_seccion'] : null;
-      if (id is int) mapa[id] = await ProgresoLocalService.vistos(id);
-    }
-    return mapa;
+    final ids = secciones.map((sec) => sec is Map ? sec['id_seccion'] : null).whereType<int>().toList();
+    final vistos = await Future.wait(ids.map(ProgresoLocalService.vistos));
+    return {for (int i = 0; i < ids.length; i++) ids[i]: vistos[i]};
+  }
+
+  Future<void> _actualizarVistosDe(int idSeccion) async {
+    final vistos = await ProgresoLocalService.vistos(idSeccion);
+    if (!mounted) return;
+    setState(() => _vistos[idSeccion] = vistos);
+  }
+
+  void _marcarCompletada(int idSeccion) {
+    final i = _secciones.indexWhere((s) => s is Map && s['id_seccion'] == idSeccion);
+    if (i < 0) return;
+    setState(() {
+      _secciones = [..._secciones];
+      _secciones[i] = {...Map<String, dynamic>.from(_secciones[i] as Map), 'completado': true};
+    });
   }
 
   Set<int> _vistosDe(Map<String, dynamic> sec) {
@@ -152,8 +174,8 @@ class _StudyViewState extends State<StudyView>
 
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => LessonView(
+      RutaSuave(
+        page: LessonView(
           idSeccion: sec['id_seccion'],
           numeroSeccion: sectionIndex + 1,
           tituloSeccion: sec['titulo'] ?? '',
@@ -167,21 +189,28 @@ class _StudyViewState extends State<StudyView>
     );
 
     if (!mounted) return;
+    final idSeccion = sec['id_seccion'];
+    if (idSeccion is int) {
+      await _actualizarVistosDe(idSeccion);
+      if (result == 'examen') _marcarCompletada(idSeccion);
+    }
+    if (!mounted) return;
     if (result == 'examen' && examen != null) {
-      await _fetchCourseDetails();
-      if (!mounted) return;
-      final fresh = _secciones.firstWhere(
-        (s) => s['id_seccion'] == sec['id_seccion'],
-        orElse: () => sec,
-      ) as Map<String, dynamic>;
+      final fresh = Map<String, dynamic>.from(
+        _secciones.firstWhere(
+          (s) => s is Map && s['id_seccion'] == idSeccion,
+          orElse: () => sec,
+        ) as Map,
+      );
       final freshExam = (fresh['examen'] as Map<String, dynamic>?) ?? examen;
       if (freshExam['intentos'] is Map) {
+        _fetchCourseDetails(silencioso: true);
         _showRetakeDialog(fresh, sectionIndex, freshExam);
         return;
       }
       await _openExam(fresh, sectionIndex, freshExam);
     } else {
-      _fetchCourseDetails();
+      _fetchCourseDetails(silencioso: true);
     }
   }
 
@@ -189,8 +218,8 @@ class _StudyViewState extends State<StudyView>
     // Navegación a la vista del examen
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ExamView(
+      RutaSuave(
+        page: ExamView(
           examen: {
             ...examen,
             'titulo': 'Examen · Sección ${sectionIndex + 1}',
@@ -203,7 +232,7 @@ class _StudyViewState extends State<StudyView>
       ),
     );
 
-    if (mounted) _fetchCourseDetails();
+    if (mounted) _fetchCourseDetails(silencioso: true);
   }
 
   static const int _notaAprobatoria = 60;
@@ -217,6 +246,7 @@ class _StudyViewState extends State<StudyView>
     final int total = int.tryParse(intentos['total_intentos']?.toString() ?? '') ?? 1;
     final bool aprobado = ultima >= _notaAprobatoria;
     final Color color = aprobado ? _success : const Color(0xFFF59E0B);
+    bool verResultados = false;
 
     final repetir = await AlertaFlotante.confirmar(
       context,
@@ -250,7 +280,27 @@ class _StudyViewState extends State<StudyView>
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, color: _muted),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          Builder(
+            builder: (dialogContext) => TextButton.icon(
+              onPressed: () {
+                verResultados = true;
+                Navigator.of(dialogContext).pop(false);
+              },
+              icon: const Icon(Icons.insights_rounded, size: 18),
+              label: const Text(
+                'Ver mis resultados',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: _exam,
+                backgroundColor: const Color(0xFFEEF2FF),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Text(
             '¿Quieres volver a hacer el examen?',
             textAlign: TextAlign.center,
@@ -260,7 +310,62 @@ class _StudyViewState extends State<StudyView>
       ),
     );
 
-    if (repetir && mounted) _openExam(sec, sectionIndex, examen);
+    if (!mounted) return;
+    if (verResultados) {
+      _abrirResultados(examen);
+      return;
+    }
+    if (repetir) _openExam(sec, sectionIndex, examen);
+  }
+
+  int _entero(dynamic v) => int.tryParse(v?.toString() ?? '') ?? 0;
+
+  List<Map<String, dynamic>> _listaMapas(dynamic v) => v is List
+      ? v.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+      : <Map<String, dynamic>>[];
+
+  Future<void> _abrirResultados(Map<String, dynamic> examen) async {
+    final idExamen = int.tryParse(examen['id_examen']?.toString() ?? '');
+    if (idExamen == null) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: _primary)),
+    );
+    final res = await ApiService.getLastAttempt(idExamen);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (res['success'] != true) {
+      AlertaFlotante.mostrar(
+        context,
+        titulo: 'No se pudieron abrir tus resultados',
+        mensaje: res['message']?.toString() ?? 'Inténtalo de nuevo en un momento.',
+        tipo: TipoAlerta.error,
+      );
+      return;
+    }
+
+    final data = Map<String, dynamic>.from(res['data'] as Map);
+    final resultado = data['resultado'] is Map ? Map<String, dynamic>.from(data['resultado'] as Map) : <String, dynamic>{};
+    final total = _entero(resultado['totalPreguntas']);
+    final correctas = _entero(resultado['correctas']);
+
+    await Navigator.push(
+      context,
+      RutaSuave(
+        page: ResultView(
+          totalPreguntas: total,
+          correctas: correctas,
+          incorrectas: _entero(resultado['incorrectas']),
+          porcentaje: _pct(resultado['calificacion']),
+          erroresDelExamen: _listaMapas(data['errores']),
+          examenCompleto: _listaMapas(data['examen_completo']),
+        ),
+      ),
+    );
   }
 
   void _showLockedDialog() {
@@ -504,7 +609,7 @@ class _StudyViewState extends State<StudyView>
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: _primary.withValues(alpha: 0.25), width: 1.4),
           boxShadow: [
-            BoxShadow(color: _primary.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 8)),
+            BoxShadow(color: _primary.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 6)),
           ],
         ),
         child: Row(
@@ -648,8 +753,8 @@ class _StudyViewState extends State<StudyView>
         boxShadow: [
           BoxShadow(
             color: (actual ? _primary : Colors.black).withValues(alpha: actual ? 0.12 : 0.04),
-            blurRadius: actual ? 20 : 10,
-            offset: Offset(0, actual ? 8 : 4),
+            blurRadius: actual ? 14 : 8,
+            offset: Offset(0, actual ? 6 : 3),
           ),
         ],
       ),
@@ -740,7 +845,7 @@ class _StudyViewState extends State<StudyView>
           ),
           ClipRect(
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 280),
+              duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               child: !abierta
@@ -836,7 +941,7 @@ class _StudyViewState extends State<StudyView>
         top: false,
         child: RefreshIndicator(
           color: _primary,
-          onRefresh: _fetchCourseDetails,
+          onRefresh: () => _fetchCourseDetails(silencioso: true),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
@@ -868,12 +973,24 @@ class _StudyViewState extends State<StudyView>
                         const SizedBox(height: 24),
 
                         // 2. Tarjeta Informativa del Curso
-                        Aparecer(orden: 0, child: _tarjetaProgreso(title, description)),
+                        Aparecer(
+                          orden: 0,
+                          duracion: const Duration(milliseconds: 320),
+                          pasoMs: 40,
+                          desplazamiento: 14,
+                          child: _tarjetaProgreso(title, description),
+                        ),
 
                         const SizedBox(height: 28),
 
                         if (_siguientePaso != null) ...[
-                          Aparecer(orden: 1, child: _tarjetaContinuar()),
+                          Aparecer(
+                            orden: 1,
+                            duracion: const Duration(milliseconds: 320),
+                            pasoMs: 40,
+                            desplazamiento: 14,
+                            child: _tarjetaContinuar(),
+                          ),
                           const SizedBox(height: 28),
                         ],
 
@@ -892,7 +1009,10 @@ class _StudyViewState extends State<StudyView>
                         // 3. Renderizado de Secciones, Lecciones y Examen Final de Sección
                         for (int i = 0; i < _secciones.length; i++)
                           Aparecer(
-                            orden: i + 2,
+                            orden: (i + 2).clamp(0, 6),
+                            duracion: const Duration(milliseconds: 320),
+                            pasoMs: 40,
+                            desplazamiento: 14,
                             child: _tarjetaModulo(Map<String, dynamic>.from(_secciones[i] as Map), i),
                           ),
 
@@ -930,86 +1050,91 @@ class _StudyViewState extends State<StudyView>
             ),
           );
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 30,
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isCompleted || visto ? colorCirculo : Colors.white,
-                    border: Border.all(color: colorCirculo, width: 2),
-                  ),
-                  child: Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
-                      child: KeyedSubtree(
-                        key: ValueKey('${isCompleted}_$visto'),
-                        child: contenidoCirculo,
-                      ),
-                    ),
-                  ),
-                ),
-                if (showConnector)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: isCompleted
-                          ? _success.withValues(alpha: 0.4)
-                          : const Color(0xFFC7D7FB),
-                    ),
-                  ),
-              ],
+    return Stack(
+      children: [
+        if (showConnector)
+          Positioned(
+            left: 14,
+            top: 38,
+            bottom: 0,
+            width: 2,
+            child: ColoredBox(
+              color: isCompleted
+                  ? _success.withValues(alpha: 0.4)
+                  : const Color(0xFFC7D7FB),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _PressScale(
-                onTap: onTap,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _border, width: 1.2),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: _text,
-                          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 30,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isCompleted || visto ? colorCirculo : Colors.white,
+                      border: Border.all(color: colorCirculo, width: 2),
+                    ),
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                        child: KeyedSubtree(
+                          key: ValueKey('${isCompleted}_$visto'),
+                          child: contenidoCirculo,
                         ),
                       ),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        color: Color(0xFF94A3B8),
-                        size: 20,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _PressScale(
+                  onTap: onTap,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _border, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _text,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Color(0xFF94A3B8),
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1034,13 +1159,15 @@ class _StudyViewState extends State<StudyView>
             padding: const EdgeInsets.only(top: 14),
             child: Center(
               child: isUnlocked
-                  ? AnimatedBuilder(
-                      animation: _floatController,
-                      builder: (context, child) => Transform.scale(
-                        scale: 1 + math.sin(_floatController.value * 2 * math.pi) * 0.12,
-                        child: child,
+                  ? RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _floatController,
+                        builder: (context, child) => Transform.scale(
+                          scale: 1 + math.sin(_floatController.value * 2 * math.pi) * 0.12,
+                          child: child,
+                        ),
+                        child: const Icon(Icons.flag_rounded, color: _exam, size: 22),
                       ),
-                      child: const Icon(Icons.flag_rounded, color: _exam, size: 22),
                     )
                   : const Icon(Icons.lock_rounded, color: Color(0xFF94A3B8), size: 22),
             ),

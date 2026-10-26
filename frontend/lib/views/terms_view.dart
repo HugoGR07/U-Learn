@@ -89,9 +89,20 @@ class _TermsViewState extends State<TermsView> {
                 maximo: 760,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _contenido,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (actual, previos) => Stack(
+                      alignment: Alignment.topCenter,
+                      children: [...previos, if (actual != null) actual],
+                    ),
+                    transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+                    child: Column(
+                      key: ValueKey(_tab),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _contenido,
+                    ),
                   ),
                 ),
               ),
@@ -264,17 +275,15 @@ class _TermsViewState extends State<TermsView> {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: activo ? Colors.white : Colors.transparent,
+                  color: activo ? Colors.white : Colors.white.withValues(alpha: 0),
                   borderRadius: BorderRadius.circular(10),
-                  boxShadow: activo
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: activo ? 0.06 : 0),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   etiquetas[i],

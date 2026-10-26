@@ -7,6 +7,7 @@ import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/componentes_guia.dart';
 import '../widgets/efectos_animados.dart';
+import '../widgets/ruta_suave.dart';
 
 class ExamView extends StatefulWidget {
   final Map<String, dynamic> examen;
@@ -229,6 +230,7 @@ class _ExamViewState extends State<ExamView> {
         if (esError) {
           incorrectasLocales++;
           erroresLocales.add({
+            'id_pregunta': pregunta['id_pregunta'] ?? pregunta['id'],
             'pregunta': enunciado,
             'respuesta_usuario': respuestaUsuarioFormateada,
             'respuesta_correcta': respuestaCorrectaFormateada,
@@ -265,14 +267,14 @@ class _ExamViewState extends State<ExamView> {
         final aprobado = pct >= 60;
         NotificationService.showProgress(
           aprobado ? '¡Aprobaste el examen! 🏆' : 'Examen terminado 📝',
-          '${donde.isEmpty ? 'Examen' : donde}: acertaste $buenas de $total preguntas ($pct%).'
+          '${donde.isEmpty ? 'Examen' : donde}: Acertaste $buenas/$total preguntas ($pct%).'
           '${aprobado ? '' : ' Repasa los temas y vuelve a intentarlo.'}',
         );
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => ResultView(
+          RutaSuave(
+            page: ResultView(
               totalPreguntas: total,
               correctas: buenas,
               incorrectas: malas,
@@ -746,17 +748,26 @@ class _ExamViewState extends State<ExamView> {
                   children: [
                     _barraSuperior(horizontal),
                     Expanded(
-                      child: SingleChildScrollView(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onHorizontalDragEnd: (detalles) {
+                          final v = detalles.primaryVelocity ?? 0;
+                          final ultima = _currentQuestionIndex == _preguntas.length - 1;
+                          if (v < -350 && selectedOptionIndex != null && !ultima) _nextQuestion();
+                          if (v > 350 && _currentQuestionIndex > 0) _previousQuestion();
+                        },
+                        child: SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: AnchoMaximo(
                           maximo: 800,
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 350),
+                            duration: const Duration(milliseconds: 220),
+                            reverseDuration: const Duration(milliseconds: 140),
                             switchInCurve: Curves.easeOutCubic,
                             switchOutCurve: Curves.easeInCubic,
                             transitionBuilder: (child, animation) {
                               final entra = child.key == ValueKey(_currentQuestionIndex);
-                              final desde = (_haciaAdelante == entra) ? 0.15 : -0.15;
+                              final desde = (_haciaAdelante == entra) ? 0.08 : -0.08;
                               return FadeTransition(
                                 opacity: animation,
                                 child: SlideTransition(
@@ -779,6 +790,9 @@ class _ExamViewState extends State<ExamView> {
                                 for (int i = 0; i < opciones.length; i++) ...[
                                   Aparecer(
                                     orden: i + 1,
+                                    duracion: const Duration(milliseconds: 260),
+                                    pasoMs: 30,
+                                    desplazamiento: 12,
                                     child: _opcion(i, opciones[i], selectedOptionIndex == i),
                                   ),
                                   const SizedBox(height: 12),
@@ -788,6 +802,7 @@ class _ExamViewState extends State<ExamView> {
                             ),
                           ),
                         ),
+                      ),
                       ),
                     ),
                     _barraInferior(horizontal, selectedOptionIndex),

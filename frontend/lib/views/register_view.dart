@@ -4,6 +4,7 @@ import 'login_view.dart';
 import 'terms_view.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class RegisterView extends StatefulWidget {
   const RegisterView({super.key});
@@ -104,7 +105,7 @@ class _RegisterViewState extends State<RegisterView> {
         onConfirm: () {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const LoginView()),
+            RutaSuave(page: const LoginView()),
           );
         },
       );
@@ -331,7 +332,7 @@ class _RegisterViewState extends State<RegisterView> {
                       onTap: () {
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (context) => const LoginView()),
+                          RutaSuave(page: const LoginView()),
                         );
                       },
                       child: const Text(
@@ -358,8 +359,8 @@ class _RegisterViewState extends State<RegisterView> {
   Future<void> _abrirTerminos(int pestana) async {
     final acepto = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => TermsView(
+      RutaSuave(
+        page: TermsView(
           pestanaInicial: pestana,
           modoAceptar: true,
           yaAceptado: _aceptaTerminos,

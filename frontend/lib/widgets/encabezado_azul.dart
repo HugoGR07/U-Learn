@@ -135,69 +135,83 @@ class _EncabezadoAzulState extends State<EncabezadoAzul>
     final horizontal = MediaQuery.orientationOf(context) == Orientation.landscape;
     final arriba = horizontal ? 6.0 : (widget.grande ? 16.0 : 12.0);
     final abajo = horizontal ? 14.0 : (widget.grande ? 30.0 : 24.0);
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = _controller.value * 2 * math.pi;
-        final shift = math.sin(t) * 0.35;
-        return Container(
-          width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment(-1 + shift, -1),
-              end: Alignment(1 - shift, 1),
-              colors: const [
-                Color(0xFF0D47A1),
-                Color(0xFF1D61E7),
-                Color(0xFF1E88E5),
-              ],
-            ),
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(28),
-              bottomRight: Radius.circular(28),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1D61E7).withValues(alpha: 0.35),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Positioned(top: -40, right: -30, child: _drift(_bubble(140, 0.09), 0, 14)),
-              Positioned(bottom: -50, left: -20, child: _drift(_bubble(110, 0.07), 2.5, 12)),
-              Positioned(top: 10, left: 140, child: _drift(_bubble(36, 0.06), 4.5, 10)),
-              Positioned(bottom: 8, left: 70, child: _icon(Icons.savings_rounded, 0, 26)),
-              Positioned(top: 34, right: 90, child: _icon(Icons.credit_card_rounded, 4.2, 22)),
-              Positioned(bottom: 10, right: 30, child: _icon(Icons.trending_up_rounded, 2.1, 26)),
-              Positioned(top: 6, right: 170, child: _icon(Icons.attach_money_rounded, 1.2, 20)),
-              Positioned.fill(child: _shimmer()),
-              child!,
-            ],
-          ),
-        );
-      },
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            arriba,
-            20,
-            abajo + widget.extraBottom,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: widget.grande
-                  ? EncabezadoAzul.altoContenidoGrande
-                  : EncabezadoAzul.altoContenido,
-            ),
-            child: Center(child: widget.content ?? _defaultRow()),
-          ),
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1D61E7),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1D61E7).withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  final t = _controller.value * 2 * math.pi;
+                  final shift = math.sin(t) * 0.35;
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment(-1 + shift, -1),
+                        end: Alignment(1 - shift, 1),
+                        colors: const [
+                          Color(0xFF0D47A1),
+                          Color(0xFF1D61E7),
+                          Color(0xFF1E88E5),
+                        ],
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(top: -40, right: -30, child: _drift(_bubble(140, 0.09), 0, 14)),
+                        Positioned(bottom: -50, left: -20, child: _drift(_bubble(110, 0.07), 2.5, 12)),
+                        Positioned(top: 10, left: 140, child: _drift(_bubble(36, 0.06), 4.5, 10)),
+                        Positioned(bottom: 8, left: 70, child: _icon(Icons.savings_rounded, 0, 26)),
+                        Positioned(top: 34, right: 90, child: _icon(Icons.credit_card_rounded, 4.2, 22)),
+                        Positioned(bottom: 10, right: 30, child: _icon(Icons.trending_up_rounded, 2.1, 26)),
+                        Positioned(top: 6, right: 170, child: _icon(Icons.attach_money_rounded, 1.2, 20)),
+                        Positioned.fill(child: _shimmer()),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          RepaintBoundary(
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  arriba,
+                  20,
+                  abajo + widget.extraBottom,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: widget.grande
+                        ? EncabezadoAzul.altoContenidoGrande
+                        : EncabezadoAzul.altoContenido,
+                  ),
+                  child: Center(child: widget.content ?? _defaultRow()),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

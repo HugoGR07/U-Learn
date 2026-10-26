@@ -145,41 +145,77 @@ class AlertaFlotante {
     required bool cerrarAlTocarFuera,
     required Widget Function(void Function(T valor) cerrar) hijo,
   }) {
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: cerrarAlTocarFuera,
-      barrierLabel: 'Cerrar',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: const Duration(milliseconds: 420),
-      pageBuilder: (dialogContext, _, __) {
-        void cerrar(T valor) {
-          if (Navigator.of(dialogContext).canPop()) Navigator.of(dialogContext).pop(valor);
-        }
+    return Navigator.of(context, rootNavigator: true).push<T>(
+      _RutaAlerta<T>(
+        cerrarAlTocarFuera: cerrarAlTocarFuera,
+        constructor: (dialogContext) {
+          void cerrar(T valor) {
+            if (Navigator.of(dialogContext).canPop()) Navigator.of(dialogContext).pop(valor);
+          }
 
-        return hijo(cerrar);
-      },
-      transitionBuilder: (context, animation, _, child) {
-        final entrada = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-          reverseCurve: Curves.easeInCubic,
-        );
-        final opacidad = CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0, 0.6, curve: Curves.easeOut),
-          reverseCurve: Curves.easeIn,
-        );
-        return FadeTransition(
-          opacity: opacidad,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(entrada),
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.86, end: 1).animate(entrada),
-              child: child,
-            ),
-          ),
-        );
-      },
+          return hijo(cerrar);
+        },
+      ),
+    );
+  }
+}
+
+class _RutaAlerta<T> extends PopupRoute<T> {
+  final bool cerrarAlTocarFuera;
+  final WidgetBuilder constructor;
+
+  _RutaAlerta({required this.cerrarAlTocarFuera, required this.constructor});
+
+  @override
+  Color? get barrierColor => Colors.black.withValues(alpha: 0.45);
+
+  @override
+  bool get barrierDismissible => cerrarAlTocarFuera;
+
+  @override
+  String? get barrierLabel => 'Cerrar';
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 340);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 170);
+
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      child: RepaintBoundary(child: constructor(context)),
+    );
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final entrada = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutBack,
+      reverseCurve: Curves.easeInQuad,
+    );
+    final opacidad = CurvedAnimation(
+      parent: animation,
+      curve: const Interval(0, 0.6, curve: Curves.easeOut),
+      reverseCurve: Curves.easeOut,
+    );
+    return FadeTransition(
+      opacity: opacidad,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(entrada),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.9, end: 1).animate(entrada),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -290,7 +326,8 @@ class _VentanaAlertaState extends State<_VentanaAlerta> with TickerProviderState
     return SizedBox(
       width: tam + 28,
       height: tam + 28,
-      child: AnimatedBuilder(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
         animation: Listenable.merge([_icono, _pulso]),
         builder: (context, _) {
           final p = _pulso.value;
@@ -326,6 +363,7 @@ class _VentanaAlertaState extends State<_VentanaAlerta> with TickerProviderState
             ],
           );
         },
+        ),
       ),
     );
   }

@@ -8,6 +8,7 @@ import '../widgets/encabezado_azul.dart';
 import 'terms_view.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -237,17 +238,30 @@ class _ProfileViewState extends State<ProfileView> {
 
                             setModalState(() => isSaving = true);
 
+                            final anterior = ApiService.currentUser == null
+                                ? null
+                                : Map<String, dynamic>.from(ApiService.currentUser!);
+                            final nombre = nombreCtrl.text.trim();
+                            final paterno = paternoCtrl.text.trim();
+                            final materno = maternoCtrl.text.trim();
+                            ApiService.currentUser = {
+                              ...?anterior,
+                              'nombre': nombre,
+                              'apellido_paterno': paterno,
+                              'apellido_materno': materno,
+                            };
+                            Navigator.pop(context);
+                            setState(() {});
+
                             final res = await ApiService.updateProfile(
-                              nombre: nombreCtrl.text.trim(),
-                              apellidoPaterno: paternoCtrl.text.trim(),
-                              apellidoMaterno: maternoCtrl.text.trim(),
+                              nombre: nombre,
+                              apellidoPaterno: paterno,
+                              apellidoMaterno: materno,
                             );
 
                             if (!mounted) return;
-                            setModalState(() => isSaving = false);
 
                             if (res['success'] == true) {
-                              Navigator.pop(context); // Cierra el formulario solo si se guardó
                               setState(() {}); // Actualiza la pantalla principal con el nuevo nombre
                               _showFloatingDialog(
                                 title: '¡Datos actualizados! 🎉',
@@ -255,6 +269,8 @@ class _ProfileViewState extends State<ProfileView> {
                                 isSuccess: true,
                               );
                             } else {
+                              ApiService.currentUser = anterior;
+                              setState(() {});
                               _showFloatingDialog(
                                 title: 'Aviso',
                                 message: res['message']?.toString() ??
@@ -382,12 +398,18 @@ class _ProfileViewState extends State<ProfileView> {
                         ? null
                         : () async {
                             setModalState(() => isSaving = true);
-                            final res = await ApiService.updateProfilePhoto(seleccion!);
+                            final foto = seleccion!;
+                            final anterior = ApiService.currentUser == null
+                                ? null
+                                : Map<String, dynamic>.from(ApiService.currentUser!);
+                            ApiService.currentUser = {...?anterior, 'foto_perfil': foto};
+                            Navigator.pop(context);
+                            setState(() {});
+
+                            final res = await ApiService.updateProfilePhoto(foto);
                             if (!mounted) return;
-                            setModalState(() => isSaving = false);
 
                             if (res['success'] == true) {
-                              Navigator.pop(context);
                               setState(() {});
                               _showFloatingDialog(
                                 title: '¡Foto actualizada! 🎉',
@@ -395,6 +417,8 @@ class _ProfileViewState extends State<ProfileView> {
                                 isSuccess: true,
                               );
                             } else {
+                              ApiService.currentUser = anterior;
+                              setState(() {});
                               _showFloatingDialog(
                                 title: 'Aviso',
                                 message: res['message']?.toString() ??
@@ -638,17 +662,17 @@ class _ProfileViewState extends State<ProfileView> {
                   subtitle: const Text('Resumen semanal de tu progreso', style: TextStyle(fontSize: 12)),
                   value: _emailNotifications,
                   onChanged: (val) async {
-                    final res = await ApiService.updateNotificationSettingsDetallado(emailAlerts: val);
-                    if (res['success'] != true) {
-                      _snack(
-                        res['message']?.toString() ?? 'No se pudo guardar tu preferencia. Inténtalo de nuevo.',
-                        titulo: 'No se guardó el cambio',
-                        tipo: TipoAlerta.error,
-                      );
-                      return;
-                    }
                     setModalState(() => _emailNotifications = val);
                     setState(() => _emailNotifications = val);
+                    final res = await ApiService.updateNotificationSettingsDetallado(emailAlerts: val);
+                    if (res['success'] == true || !mounted) return;
+                    if (context.mounted) setModalState(() => _emailNotifications = !val);
+                    setState(() => _emailNotifications = !val);
+                    _snack(
+                      res['message']?.toString() ?? 'No se pudo guardar tu preferencia. Inténtalo de nuevo.',
+                      titulo: 'No se guardó el cambio',
+                      tipo: TipoAlerta.error,
+                    );
                   },
                 ),
                 const Divider(),
@@ -761,11 +785,11 @@ class _ProfileViewState extends State<ProfileView> {
 
     final navigator = Navigator.of(context);
     navigator.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeView()),
+      RutaSuave(page: const HomeView()),
       (route) => false,
     );
     navigator.push(
-      MaterialPageRoute(builder: (_) => const LoginView()),
+      RutaSuave(page: const LoginView()),
     );
   }
 
@@ -936,7 +960,7 @@ class _ProfileViewState extends State<ProfileView> {
                       title: 'Términos y privacidad',
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const TermsView()),
+                        RutaSuave(page: const TermsView()),
                       ),
                     ),
                     const SizedBox(height: 12),

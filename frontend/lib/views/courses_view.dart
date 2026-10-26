@@ -5,12 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'topics_view.dart';
-import 'profile_view.dart'; 
+import 'profile_view.dart';
 import 'study_view.dart';
 import '../widgets/foto_perfil.dart';
 import '../widgets/encabezado_azul.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class CoursesView extends StatefulWidget {
   const CoursesView({super.key});
@@ -22,6 +23,7 @@ class CoursesView extends StatefulWidget {
 class _CoursesViewState extends State<CoursesView> {
   List<dynamic> _courses = [];
   bool _isLoading = true;
+  bool _actualizando = false;
   bool _hasWelcomed = false;
 
   // Obtiene el nombre real devuelto por la BD al hacer login
@@ -225,9 +227,12 @@ class _CoursesViewState extends State<CoursesView> {
     );
   }
 
-  Future<void> _loadUserAndCourses() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
+  Future<void> _loadUserAndCourses({bool silencioso = false}) async {
+    if (!mounted || _actualizando) return;
+    setState(() {
+      _actualizando = true;
+      if (_courses.isEmpty) _isLoading = true;
+    });
 
     // Al volver de otra pantalla puede haber notificaciones nuevas
     NotificationService.loadInbox();
@@ -239,12 +244,17 @@ class _CoursesViewState extends State<CoursesView> {
         setState(() {
           _courses = coursesData.where((c) => !_borrando.contains(_idDe(c))).toList();
           _isLoading = false;
+          _actualizando = false;
         });
         _mostrarBannerBienvenida();
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _actualizando = false;
+      });
+      if (silencioso && _courses.isNotEmpty) return;
       AlertaFlotante.mostrar(
         context,
         titulo: 'No se pudieron cargar tus cursos',
@@ -472,7 +482,7 @@ class _CoursesViewState extends State<CoursesView> {
     final confirmado = await AlertaFlotante.confirmar(
       context,
       titulo: '¿Eliminar este curso?',
-      mensaje: 'Se borrará «$nombre» con todo tu avance y tus calificaciones. Esta acción no se puede deshacer.',
+      mensaje: 'Se borrará «$nombre» con todo tu avance y calificaciones. Esta acción no se puede deshacer.',
       tipo: TipoAlerta.error,
       icono: Icons.delete_outline_rounded,
       textoConfirmar: 'Eliminar',
@@ -495,7 +505,7 @@ class _CoursesViewState extends State<CoursesView> {
     if (res['success'] == true) {
       NotificationService.showProgress(
         'Curso eliminado 🗑️',
-        'Se eliminó «$nombre» junto con su avance y calificaciones.',
+        'Se eliminó «$nombre» junto con el avance y calificaciones.',
       );
       NotificationService.refreshReminder();
       return;
@@ -542,6 +552,91 @@ class _CoursesViewState extends State<CoursesView> {
     );
   }
 
+  Widget _envolver(Widget child, {Key? key}) {
+    return AnchoMaximo(
+      key: key,
+      maximo: 760,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _tarjetaCurso(dynamic course) {
+    final int total = int.tryParse(course['total_secciones']?.toString() ?? '0') ?? 0;
+    final int completadas = int.tryParse(course['secciones_completadas']?.toString() ?? '0') ?? 0;
+
+    final int totalExamenes = int.tryParse(course['total_examenes']?.toString() ?? '0') ?? 0;
+    final int presentados = int.tryParse(course['examenes_presentados']?.toString() ?? '0') ?? 0;
+    final int pasos = total + totalExamenes;
+    final int hechos = completadas + presentados.clamp(0, totalExamenes);
+
+    final double progress = pasos > 0 ? (hechos / pasos).clamp(0.0, 1.0) : 0.0;
+    final String progressPercentage = '${(progress * 100).round()}%';
+    final bool isCompleted = progress >= 1.0 && pasos > 0;
+    final String nombreTema =
+        (course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio').toString();
+    final style = _getTopicStyle(nombreTema);
+    final int? idGuiaCurso = _idDe(course);
+
+    final tarjeta = _CourseCard(
+      title: nombreTema,
+      topicIcon: style['icon'] as IconData,
+      topicColor: style['color'] as Color,
+      progress: progress,
+      progressText: progressPercentage,
+      timeRemaining: total > 0
+          ? (totalExamenes > 0
+              ? '$completadas de $total secciones · $presentados de $totalExamenes exámenes'
+              : '$completadas de $total secciones completadas')
+          : 'Sin secciones registradas',
+      color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+      isCompleted: isCompleted,
+      onTap: () async {
+        final int? idGuia = _idDe(course);
+
+        if (idGuia == null) {
+          AlertaFlotante.mostrar(
+            context,
+            titulo: 'No se pudo abrir el curso',
+            mensaje: 'Actualiza la lista de cursos e inténtalo de nuevo.',
+            tipo: TipoAlerta.error,
+          );
+          return;
+        }
+
+        _quitarBanner();
+
+        await Navigator.push(
+          context,
+          RutaSuave(page: StudyView(idGuia: idGuia)),
+        );
+
+        _loadUserAndCourses(silencioso: true);
+      },
+      onLongPress: idGuiaCurso == null
+          ? null
+          : () async {
+              if (await _confirmarEliminar(idGuiaCurso, nombreTema)) {
+                _eliminarConfirmado(idGuiaCurso, nombreTema);
+              }
+            },
+    );
+
+    if (idGuiaCurso == null) return tarjeta;
+
+    return Dismissible(
+      key: ValueKey('guia_$idGuiaCurso'),
+      direction: DismissDirection.endToStart,
+      background: _fondoEliminar(),
+      resizeDuration: const Duration(milliseconds: 220),
+      confirmDismiss: (_) => _confirmarEliminar(idGuiaCurso, nombreTema),
+      onDismissed: (_) => _eliminarConfirmado(idGuiaCurso, nombreTema),
+      child: tarjeta,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -552,167 +647,115 @@ class _CoursesViewState extends State<CoursesView> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadUserAndCourses,
-              child: SingleChildScrollView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  children: [
-                    // 1. Cabecera Azul Superior (se desplaza junto con la lista)
-                    _buildHeader(),
-                    AnchoMaximo(
-                      maximo: 760,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        // 1. Cabecera Azul Superior (se desplaza junto con la lista)
+                        RepaintBoundary(child: _buildHeader()),
+                        AnchoMaximo(
+                          maximo: 760,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text(
-                                      'Mis cursos',
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    if (_courses.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEBF2FE),
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          '${_courses.length}',
-                                          style: const TextStyle(
-                                            fontSize: 13,
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          'Mis cursos',
+                                          style: TextStyle(
+                                            fontSize: 22,
                                             fontWeight: FontWeight.bold,
-                                            color: Color(0xFF1D61E7),
+                                            color: Color(0xFF0F172A),
                                           ),
                                         ),
+                                        if (_courses.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEBF2FE),
+                                              borderRadius: BorderRadius.circular(20),
+                                            ),
+                                            child: Text(
+                                              '${_courses.length}',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF1D61E7),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    IconButton(
+                                      icon: AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 200),
+                                        child: _actualizando && _courses.isNotEmpty
+                                            ? const SizedBox(
+                                                key: ValueKey('cargando'),
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.4,
+                                                  color: Color(0xFF2563EB),
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.refresh_rounded,
+                                                key: ValueKey('icono'),
+                                                color: Color(0xFF2563EB),
+                                              ),
                                       ),
-                                    ],
+                                      onPressed: _actualizando ? null : _loadUserAndCourses,
+                                    ),
                                   ],
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
-                                  onPressed: _loadUserAndCourses,
-                                ),
+
+                                if (_courses.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    'Desliza un curso a la izquierda o mantenlo presionado para eliminarlo.',
+                                    textAlign: TextAlign.justify,
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 16),
                               ],
                             ),
-
-                            if (_courses.isNotEmpty && !_isLoading) ...[
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Desliza un curso a la izquierda o mantenlo presionado para eliminarlo.',
-                                textAlign: TextAlign.justify,
-                                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                              ),
-                            ],
-
-                            const SizedBox(height: 16),
-
-                            // Estado de Carga / Vacío / Lista de Cursos
-                            if (_isLoading)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 40),
-                                child: Center(
-                                  child: CircularProgressIndicator(color: Color(0xFF2563EB)),
-                                ),
-                              )
-                            else if (_courses.isEmpty)
-                              _buildEmptyState()
-                            else
-                              ..._courses.map((course) {
-                                final int total = int.tryParse(course['total_secciones']?.toString() ?? '0') ?? 0;
-                                final int completadas = int.tryParse(course['secciones_completadas']?.toString() ?? '0') ?? 0;
-
-                                final int totalExamenes = int.tryParse(course['total_examenes']?.toString() ?? '0') ?? 0;
-                                final int presentados = int.tryParse(course['examenes_presentados']?.toString() ?? '0') ?? 0;
-                                final int pasos = total + totalExamenes;
-                                final int hechos = completadas + presentados.clamp(0, totalExamenes);
-
-                                final double progress = pasos > 0 ? (hechos / pasos).clamp(0.0, 1.0) : 0.0;
-                                final String progressPercentage = '${(progress * 100).round()}%';
-                                final bool isCompleted = progress >= 1.0 && pasos > 0;
-                                final String nombreTema =
-                                    (course['nombre_tema'] ?? course['titulo'] ?? 'Guía de estudio').toString();
-                                final style = _getTopicStyle(nombreTema);
-                                final rawIdGuia = course['id_guia'] ?? course['id'];
-                                final int? idGuiaCurso =
-                                    rawIdGuia is int ? rawIdGuia : int.tryParse(rawIdGuia?.toString() ?? '');
-
-                                final tarjeta = _CourseCard(
-                                  title: nombreTema,
-                                  topicIcon: style['icon'] as IconData,
-                                  topicColor: style['color'] as Color,
-                                  progress: progress,
-                                  progressText: progressPercentage,
-                                  timeRemaining: total > 0
-                                      ? (totalExamenes > 0
-                                          ? '$completadas de $total secciones · $presentados de $totalExamenes exámenes'
-                                          : '$completadas de $total secciones completadas')
-                                      : 'Sin secciones registradas',
-                                  color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
-                                  isCompleted: isCompleted,
-                                  onTap: () async {
-                                    final rawId = course['id_guia'] ?? course['id'];
-                                    final int? idGuia = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
-
-                                    if (idGuia == null) {
-                                      AlertaFlotante.mostrar(
-                                        context,
-                                        titulo: 'No se pudo abrir el curso',
-                                        mensaje: 'Actualiza la lista de cursos e inténtalo de nuevo.',
-                                        tipo: TipoAlerta.error,
-                                      );
-                                      return;
-                                    }
-
-                                    _quitarBanner();
-
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => StudyView(idGuia: idGuia),
-                                      ),
-                                    );
-
-                                    _loadUserAndCourses();
-                                  },
-                                  onLongPress: idGuiaCurso == null
-                                      ? null
-                                      : () async {
-                                          if (await _confirmarEliminar(idGuiaCurso, nombreTema)) {
-                                            _eliminarConfirmado(idGuiaCurso, nombreTema);
-                                          }
-                                        },
-                                );
-
-                                if (idGuiaCurso == null) return tarjeta;
-
-                                return Dismissible(
-                                  key: ValueKey('guia_$idGuiaCurso'),
-                                  direction: DismissDirection.endToStart,
-                                  background: _fondoEliminar(),
-                                  resizeDuration: const Duration(milliseconds: 220),
-                                  confirmDismiss: (_) => _confirmarEliminar(idGuiaCurso, nombreTema),
-                                  onDismissed: (_) => _eliminarConfirmado(idGuiaCurso, nombreTema),
-                                  child: tarjeta,
-                                );
-                              }),
-
-                            const SizedBox(height: 96),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Estado de Carga / Vacío / Lista de Cursos
+                  if (_isLoading && _courses.isEmpty)
+                    SliverToBoxAdapter(child: _envolver(const _EsqueletoCursos()))
+                  else if (_courses.isEmpty)
+                    SliverToBoxAdapter(child: _envolver(_buildEmptyState()))
+                  else
+                    SliverList.builder(
+                      itemCount: _courses.length,
+                      itemBuilder: (context, i) {
+                        final course = _courses[i];
+                        return _envolver(
+                          _tarjetaCurso(course),
+                          key: ValueKey('fila_${_idDe(course) ?? i}'),
+                        );
+                      },
+                    ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                ],
               ),
             ),
           ),
@@ -750,11 +793,9 @@ class _CoursesViewState extends State<CoursesView> {
               _quitarBanner();
               await Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const TopicsView(),
-                ),
+                RutaSuave(page: const TopicsView()),
               );
-              _loadUserAndCourses();
+              _loadUserAndCourses(silencioso: true);
             },
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
@@ -891,9 +932,7 @@ class _CoursesViewState extends State<CoursesView> {
               _quitarBanner();
               await Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileView(),
-                ),
+                RutaSuave(page: const ProfileView()),
               );
               if (mounted) setState(() {});
             },
@@ -928,6 +967,85 @@ class _CoursesViewState extends State<CoursesView> {
     return {'icon': Icons.account_balance_wallet_rounded, 'color': const Color(0xFF1D61E7)};
   }
 
+}
+
+class _EsqueletoCursos extends StatefulWidget {
+  const _EsqueletoCursos();
+
+  @override
+  State<_EsqueletoCursos> createState() => _EsqueletoCursosState();
+}
+
+class _EsqueletoCursosState extends State<_EsqueletoCursos> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulso = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulso.dispose();
+    super.dispose();
+  }
+
+  Widget _barra(double ancho, double alto) => Container(
+        width: ancho,
+        height: alto,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE2E8F0),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      );
+
+  Widget _tarjeta() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _barra(160, 14),
+                const SizedBox(height: 14),
+                _barra(double.infinity, 6),
+                const SizedBox(height: 10),
+                _barra(120, 10),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.45, end: 1).animate(_pulso),
+        child: Column(
+          children: [_tarjeta(), _tarjeta(), _tarjeta()],
+        ),
+      ),
+    );
+  }
 }
 
 class _CourseCard extends StatefulWidget {
@@ -999,8 +1117,8 @@ class _CourseCardState extends State<_CourseCard> {
             boxShadow: [
               BoxShadow(
                 color: widget.topicColor.withValues(alpha: _pressed ? 0.14 : 0.08),
-                blurRadius: _pressed ? 8 : 16,
-                offset: Offset(0, _pressed ? 2 : 6),
+                blurRadius: _pressed ? 6 : 10,
+                offset: Offset(0, _pressed ? 2 : 5),
               ),
             ],
           ),

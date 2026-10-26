@@ -7,6 +7,7 @@ import './generation_view.dart';
 import '../widgets/encabezado_azul.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class TopicsView extends StatefulWidget {
   const TopicsView({super.key});
@@ -143,8 +144,8 @@ class _TopicsViewState extends State<TopicsView>
 
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => GenerationView(
+      RutaSuave(
+        page: GenerationView(
           selectedTopic: selectedTopicName,
           duracionSemanas: selectedWeeks,
         ),
@@ -442,7 +443,8 @@ class _TopicsViewState extends State<TopicsView>
   // El seleccionado se mueve un poco más y crece ligeramente.
   Widget _buildTopicIcon(
       IconData icon, Color color, int index, bool isSelected) {
-    return AnimatedBuilder(
+    return RepaintBoundary(
+      child: AnimatedBuilder(
       animation: _iconController,
       builder: (context, child) {
         final t = _iconController.value * 2 * math.pi + index * 0.9;
@@ -460,6 +462,7 @@ class _TopicsViewState extends State<TopicsView>
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutBack,
         child: Icon(icon, color: color, size: 28),
+      ),
       ),
     );
   }
@@ -646,7 +649,8 @@ class _TopicsViewState extends State<TopicsView>
 
   // Franja de brillo diagonal que cruza su contenedor en bucle
   Widget _shimmer(double intensity) {
-    return AnimatedBuilder(
+    return RepaintBoundary(
+      child: AnimatedBuilder(
       animation: _shimmerController,
       builder: (context, _) {
         // Recorre de -1 a 2 en la primera mitad del ciclo, luego pausa
@@ -667,6 +671,7 @@ class _TopicsViewState extends State<TopicsView>
           ),
         );
       },
+      ),
     );
   }
 
@@ -720,7 +725,8 @@ class _TopicsViewState extends State<TopicsView>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Ícono de IA que gira y late suavemente
-                          AnimatedBuilder(
+                          RepaintBoundary(
+                            child: AnimatedBuilder(
                             animation: _shimmerController,
                             builder: (context, child) {
                               final v = _shimmerController.value;
@@ -735,6 +741,7 @@ class _TopicsViewState extends State<TopicsView>
                             },
                             child: const Icon(Icons.auto_awesome_rounded,
                                 size: 20, color: Colors.white),
+                          ),
                           ),
                           const SizedBox(width: 10),
                           const Text(

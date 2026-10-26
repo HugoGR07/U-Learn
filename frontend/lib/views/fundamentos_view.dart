@@ -53,7 +53,14 @@ class _FundamentosViewState extends State<FundamentosView>
       vsync: this,
       duration: const Duration(milliseconds: 2400),
     )..repeat();
-    _cargar();
+    final guardado = ApiService.tutorGuardado(widget.errores);
+    if (guardado != null) {
+      _fundamentos = guardado['fundamentos'] as Map<String, dynamic>?;
+      _texto = (guardado['respuesta'] ?? '').toString();
+      _cargando = false;
+    } else {
+      _cargar();
+    }
   }
 
   @override
@@ -119,15 +126,20 @@ class _FundamentosViewState extends State<FundamentosView>
       .trim();
 
   Widget _buildCargando() {
-    return CentradoDesplazable(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 150,
-              height: 150,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _primary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          RepaintBoundary(
+            child: SizedBox(
+              width: 72,
+              height: 72,
               child: AnimatedBuilder(
                 animation: _loader,
                 builder: (context, _) {
@@ -137,16 +149,16 @@ class _FundamentosViewState extends State<FundamentosView>
                     alignment: Alignment.center,
                     children: [
                       Container(
-                        width: 110 + pulso * 16,
-                        height: 110 + pulso * 16,
+                        width: 54 + pulso * 8,
+                        height: 54 + pulso * 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _primary.withValues(alpha: 0.06 + pulso * 0.05),
                         ),
                       ),
                       Container(
-                        width: 86,
-                        height: 86,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: const LinearGradient(
@@ -157,23 +169,23 @@ class _FundamentosViewState extends State<FundamentosView>
                           boxShadow: [
                             BoxShadow(
                               color: _primary.withValues(alpha: 0.3),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
                           ],
                         ),
                         child: Transform.scale(
                           scale: 1 + pulso * 0.08,
-                          child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 44),
+                          child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 24),
                         ),
                       ),
                       ...List.generate(3, (i) {
                         final double a = t + i * 2 * math.pi / 3;
                         return Transform.translate(
-                          offset: Offset(math.cos(a) * 64, math.sin(a) * 64),
+                          offset: Offset(math.cos(a) * 32, math.sin(a) * 32),
                           child: Container(
-                            width: 10 - i * 2.0,
-                            height: 10 - i * 2.0,
+                            width: 6 - i * 1.0,
+                            height: 6 - i * 1.0,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: i == 1 ? const Color(0xFFF59E0B) : _primary,
@@ -186,23 +198,59 @@ class _FundamentosViewState extends State<FundamentosView>
                 },
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'El tutor está analizando tus errores',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _text),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'El tutor está analizando tus errores',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _text),
+                ),
+                const SizedBox(height: 4),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  child: Text(
+                    _mensajesCarga[_mensaje],
+                    key: ValueKey(_mensaje),
+                    style: const TextStyle(fontSize: 13, color: _muted),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              child: Text(
-                _mensajesCarga[_mensaje],
-                key: ValueKey(_mensaje),
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: _muted),
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _esqueletoExplicacion() {
+    Widget barra(double factor) => FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: factor,
+          child: Container(
+            height: 11,
+            margin: const EdgeInsets.only(bottom: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(6),
             ),
-          ],
+          ),
+        );
+
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _loader,
+        builder: (context, child) => Opacity(
+          opacity: 0.55 + 0.45 * (0.5 + 0.5 * math.sin(_loader.value * 4 * math.pi)),
+          child: child,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            children: [barra(0.45), barra(1), barra(0.92), barra(0.7)],
+          ),
         ),
       ),
     );
@@ -298,7 +346,7 @@ class _FundamentosViewState extends State<FundamentosView>
     );
   }
 
-  Widget _tarjetaFundamento(int index, Map<String, dynamic> f) {
+  Widget _tarjetaFundamento(int index, Map<String, dynamic> f, {bool cargando = false}) {
     final Map<String, dynamic> original =
         index < widget.errores.length ? widget.errores[index] : const {};
     final String concepto = _limpiar(f['concepto']);
@@ -421,6 +469,9 @@ class _FundamentosViewState extends State<FundamentosView>
             child: Divider(height: 1, color: _border),
           ),
 
+          if (cargando)
+            _esqueletoExplicacion()
+          else ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -493,6 +544,7 @@ class _FundamentosViewState extends State<FundamentosView>
             )
           else
             const SizedBox(height: 16),
+          ],
         ],
       ),
     );
@@ -542,9 +594,11 @@ class _FundamentosViewState extends State<FundamentosView>
 
   Widget _buildContenido() {
     final f = _fundamentos;
-    final List<Map<String, dynamic>> items = f != null && f['errores'] is List
-        ? (f['errores'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
-        : <Map<String, dynamic>>[];
+    final List<Map<String, dynamic>> items = _cargando
+        ? List.generate(widget.errores.length, (_) => <String, dynamic>{})
+        : f != null && f['errores'] is List
+            ? (f['errores'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+            : <Map<String, dynamic>>[];
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -569,15 +623,26 @@ class _FundamentosViewState extends State<FundamentosView>
                   style: TextStyle(fontSize: 13, color: _muted),
                 ),
                 const SizedBox(height: 16),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: _cargando ? _buildCargando() : const SizedBox(width: double.infinity),
+                ),
                 if (items.isNotEmpty)
-                  ...items.asMap().entries.map((e) => _tarjetaFundamento(e.key, e.value))
+                  ...items.asMap().entries.map((e) => AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 350),
+                        child: KeyedSubtree(
+                          key: ValueKey('${e.key}_$_cargando'),
+                          child: _tarjetaFundamento(e.key, e.value, cargando: _cargando),
+                        ),
+                      ))
                 else
                   ..._contenidoTextoPlano(),
                 const SizedBox(height: 8),
                 BrilloDeslizante(
                   borderRadius: BorderRadius.circular(16),
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _cargando ? null : () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.check_circle_rounded, size: 20),
                     label: const Text(
                       '¡Entendido!',
@@ -587,6 +652,8 @@ class _FundamentosViewState extends State<FundamentosView>
                       minimumSize: const Size(double.infinity, 52),
                       backgroundColor: _primary,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFCBD5E1),
+                      disabledForegroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
@@ -606,13 +673,11 @@ class _FundamentosViewState extends State<FundamentosView>
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         top: false,
-        child: (_cargando || _error != null)
+        child: _error != null && !_cargando
             ? Column(
                 children: [
                   _encabezado(),
-                  Expanded(
-                    child: _cargando ? _buildCargando() : _buildError(),
-                  ),
+                  Expanded(child: _buildError()),
                 ],
               )
             : _buildContenido(),

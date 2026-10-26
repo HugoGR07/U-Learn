@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'login_view.dart';
 import 'register_view.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -125,7 +126,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   }
 
   void _goTo(Widget page) {
-    Navigator.push(context, _SmoothRoute(page: page));
+    Navigator.push(context, RutaSuave(page: page));
   }
 
   @override
@@ -593,33 +594,4 @@ class _PressableScaleState extends State<_PressableScale> {
       ),
     );
   }
-}
-
-/// Transición de página: fade + deslizamiento suave desde abajo
-class _SmoothRoute extends PageRouteBuilder {
-  final Widget page;
-
-  _SmoothRoute({required this.page})
-      : super(
-          transitionDuration: const Duration(milliseconds: 450),
-          reverseTransitionDuration: const Duration(milliseconds: 350),
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return FadeTransition(
-              opacity: curved,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.08),
-                  end: Offset.zero,
-                ).animate(curved),
-                child: child,
-              ),
-            );
-          },
-        );
 }

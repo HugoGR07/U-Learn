@@ -2,8 +2,8 @@ class LegalInfo {
   static const String responsable = 'Equipo Syncore, desarrollador de U-Learn';
   static const String domicilio = '[PENDIENTE: domicilio para recibir notificaciones]';
   static const String correoPrivacidad = 'carlosfranciscofel@gmail.com';
-  static const String ultimaActualizacion = '17 de octubre de 2026';
-  static const String version = '1.0';
+  static const String ultimaActualizacion = '25 de octubre de 2026';
+  static const String version = '1.1';
 }
 
 class BloqueLegal {
@@ -58,6 +58,9 @@ const List<SeccionLegal> terminos = [
         'La inteligencia artificial puede cometer errores, dar datos desactualizados o explicaciones '
         'imprecisas. Los ejemplos con cifras en pesos mexicanos son ilustrativos. Verifica la información '
         'antes de tomar decisiones con tu dinero.'),
+    BloqueLegal.parrafo(
+        'Cuando la inteligencia artificial no responde a tiempo, algunas preguntas de examen o explicaciones '
+        'del tutor se arman directamente con el contenido de tu propia guía.'),
   ]),
   SeccionLegal('4. Límites de uso', [
     BloqueLegal.parrafo('Para que el servicio funcione para todos, actualmente aplicamos estos límites:'),
@@ -72,7 +75,8 @@ const List<SeccionLegal> terminos = [
     BloqueLegal.parrafo(
         'Los exámenes se califican automáticamente. Guardamos cada intento con su número, su '
         'calificación, la fecha y la opción que elegiste en cada pregunta, y registramos cuándo '
-        'empiezas y terminas cada sección para mostrarte tu avance.'),
+        'empiezas y terminas cada sección para mostrarte tu avance. Puedes volver a consultar los '
+        'resultados de tu último intento de cada examen desde tu guía.'),
   ]),
   SeccionLegal('6. Uso aceptable', [
     BloqueLegal.parrafo('Al usar U-Learn te comprometes a no:'),
@@ -86,6 +90,8 @@ const List<SeccionLegal> terminos = [
     BloqueLegal.parrafo(
         'U-Learn depende de servicios externos (Google Gemini, el servidor y la base de datos). '
         'Si alguno falla, la generación de guías o el tutor pueden no estar disponibles temporalmente. '
+        'Si la inteligencia artificial está muy solicitada, tu guía puede generarse con menos semanas de '
+        'las que elegiste; la app te avisará cuando esto pase. '
         'No garantizamos que el servicio esté disponible sin interrupciones.'),
   ]),
   SeccionLegal('8. Menores de edad', [
@@ -136,6 +142,8 @@ const List<SeccionLegal> avisoPrivacidad = [
     BloqueLegal.lista([
       'Tu sesión (token) y una copia de tu nombre, correo y foto de perfil, en almacenamiento cifrado del sistema (Keychain en iOS, almacenamiento cifrado en Android).',
       'La bandeja de notificaciones de la app y tus preferencias de notificaciones push y recordatorios.',
+      'Qué temas de cada sección ya revisaste, para conservar tu avance aunque cierres sesión.',
+      'Las explicaciones del tutor que ya generaste (las preguntas que fallaste, tu respuesta, la correcta y la explicación), hasta 40, para mostrártelas de nuevo sin volver a generarlas. Se borran al cerrar sesión.',
     ]),
     BloqueLegal.parrafo('Estos datos no se envían al servidor.'),
   ]),
@@ -160,7 +168,7 @@ const List<SeccionLegal> avisoPrivacidad = [
         'publicidad ni de analítica. Para funcionar usamos estos proveedores, que tratan datos '
         'por cuenta nuestra:'),
     BloqueLegal.lista([
-      'Google (API de Gemini): recibe el tema elegido y el tiempo para generar la guía. Para el tutor recibe las preguntas que fallaste, la opción que elegiste y la correcta. Nunca recibe tu nombre ni tu correo.',
+      'Google (API de Gemini): recibe el tema elegido, el nivel y el tiempo para generar la guía. Para el tutor recibe las preguntas que fallaste con sus opciones, la opción que elegiste, la correcta y la teoría de esa sección de tu guía. Nunca recibe tu nombre ni tu correo.',
       'Google (Gmail): envía los correos de recuperación y el resumen semanal; recibe tu correo, tu nombre y el contenido del mensaje.',
       'Vercel: aloja el servidor. Sus registros técnicos de errores pueden incluir tu correo cuando falla un envío.',
       'Supabase: Proveedor de base de datos PostgreSQL en la nube, al que el servidor se conecta con cifrado SSL.',
@@ -178,8 +186,8 @@ const List<SeccionLegal> avisoPrivacidad = [
     BloqueLegal.parrafo(
         'Mientras tu cuenta exista. Si solicitas la cancelación, borraremos tu usuario, tus guías con '
         'sus secciones, lecciones y exámenes, tu avance, tus intentos y respuestas, y tus códigos de '
-        'recuperación, dentro de los plazos de la ley. Al cerrar sesión se borran del teléfono tu sesión '
-        'y la copia de tus datos.'),
+        'recuperación, dentro de los plazos de la ley. Al cerrar sesión se borran del teléfono tu sesión, '
+        'la copia de tus datos y las explicaciones del tutor guardadas.'),
     BloqueLegal.parrafo(
         'Los códigos de recuperación se borran al usarse o al pedir uno nuevo. Las copias de seguridad '
         'que conserven los proveedores de infraestructura se rigen por sus propios plazos.'),
@@ -209,7 +217,8 @@ const List<DerechoArco> derechosArco = [
     'A',
     'Acceso',
     'Saber qué datos tuyos tenemos.',
-    'En Perfil ves tu nombre, correo y foto, y en la pantalla principal tus guías y tu avance. '
+    'En Perfil ves tu nombre, correo y foto; en la pantalla principal, tus guías y tu avance; y en cada guía, '
+        'los resultados de tu último intento de cada examen. '
         'Para recibir una copia completa de todo lo que guardamos, solicítala por correo.',
   ),
   DerechoArco(
@@ -223,7 +232,9 @@ const List<DerechoArco> derechosArco = [
     'C',
     'Cancelación',
     'Que eliminemos tus datos.',
-    'Solicítalo por correo. Borraremos tu cuenta y todo lo asociado a ella; no se puede deshacer.',
+    'Solicítalo por correo. Borraremos tu cuenta y todo lo asociado a ella; no se puede deshacer. '
+        'De lo que se guarda solo en tu teléfono, tu sesión y las explicaciones del tutor se borran al cerrar sesión; '
+        'el registro de temas revisados se borra al desinstalar la app.',
   ),
   DerechoArco(
     'O',
