@@ -31,7 +31,7 @@ const guideDailyLimit = async (req, res, next) => {
     );
     if (rows[0].total >= GUIAS_POR_DIA) {
       return res.status(429).json({
-        message: `Solo puedes generar ${GUIAS_POR_DIA} cursos cada 24 horas. Intenta más tarde.`,
+        message: `Solo puedes generar ${GUIAS_POR_DIA} guías cada 24 horas. Intenta más tarde.`,
       });
     }
     next();

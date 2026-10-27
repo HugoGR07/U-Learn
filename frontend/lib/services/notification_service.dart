@@ -4,7 +4,45 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 import 'api_service.dart';
+import 'dart:convert';
 import 'dart:ui' show Color;
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
+/// Notificación guardada en la bandeja de la app (campana de CoursesView).
+class AppNotification {
+  final int id;
+  final String title;
+  final String body;
+  final DateTime date;
+  final bool read;
+
+  const AppNotification({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.date,
+    this.read = false,
+  });
+
+  AppNotification copyWith({bool? read}) => AppNotification(
+      id: id, title: title, body: body, date: date, read: read ?? this.read);
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'body': body,
+        'date': date.toIso8601String(),
+        'read': read,
+      };
+
+  factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
+        id: j['id'] as int,
+        title: j['title']?.toString() ?? '',
+        body: j['body']?.toString() ?? '',
+        date: DateTime.tryParse(j['date']?.toString() ?? '') ?? DateTime.now(),
+        read: j['read'] == true,
+      );
+}
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
@@ -12,6 +50,16 @@ class NotificationService {
 
   static const _kPush = 'notif_push';
   static const _kReminder = 'notif_reminder';
+
+  static const _kInbox = 'notif_inbox';
+  static const _kScheduled = 'notif_scheduled';
+  static const _kWelcome = 'notif_welcome_done';
+  static const _maxInbox = 50;
+
+  /// Bandeja en memoria; la UI la escucha con ValueListenableBuilder.
+  static final ValueNotifier<List<AppNotification>> inbox = ValueNotifier([]);
+
+  static int get unreadCount => inbox.value.where((n) => !n.read).length;
 
   static const _reminderHour = 19;
   static const _reminderIds = [101, 102, 103];
@@ -78,11 +126,107 @@ class NotificationService {
   }
 
   static Future<void> showProgress(String title, String body) async {
+    final id = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await _addToInbox(AppNotification(id: id, title: title, body: body, date: DateTime.now()));
+
     final p = await SharedPreferences.getInstance();
     if (!(p.getBool(_kPush) ?? false)) return;
     await init();
-    await _plugin.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000, title, body, _progressDetails);
+    await _plugin.show(id, title, body, _progressDetails);
+  }
+
+  // ───────────────────────── Bandeja (campana) ─────────────────────────
+
+  /// Cada usuario tiene su propia bandeja en el teléfono.
+  static String _userKey(String base) {
+    final u = ApiService.currentUser;
+    final uid = u?['id_usuario'] ?? u?['id'] ?? u?['correo'] ?? 'anon';
+    return '${base}_$uid';
+  }
+
+  /// Carga la bandeja guardada y agrega los recordatorios que ya se dispararon.
+  static Future<void> loadInbox() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_userKey(_kInbox));
+    var list = <AppNotification>[];
+    if (raw != null) {
+      try {
+        list = (jsonDecode(raw) as List)
+            .map((e) => AppNotification.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      } catch (_) {}
+    }
+    inbox.value = list;
+
+    // La bienvenida es una notificación normal: se agrega una sola vez
+    // por usuario y, si se borra, ya no vuelve a aparecer.
+    if (!(p.getBool(_userKey(_kWelcome)) ?? false)) {
+      await p.setBool(_userKey(_kWelcome), true);
+      await _addToInbox(AppNotification(
+        id: 1,
+        title: '¡Bienvenido a U-Learn!',
+        body: 'Genera tu primera guía de estudio con IA para comenzar.',
+        date: DateTime.now(),
+      ));
+    }
+
+    await _collectDeliveredReminders();
+  }
+
+  static Future<void> markAllAsRead() async {
+    if (unreadCount == 0) return;
+    inbox.value = inbox.value.map((n) => n.copyWith(read: true)).toList();
+    await _saveInbox();
+  }
+
+  static Future<void> clearInbox() async {
+    inbox.value = [];
+    await _saveInbox();
+  }
+
+  static Future<void> _addToInbox(AppNotification n) async {
+    final list = [n, ...inbox.value.where((e) => e.id != n.id)];
+    list.sort((a, b) => b.date.compareTo(a.date));
+    inbox.value = list.take(_maxInbox).toList();
+    await _saveInbox();
+  }
+
+  static Future<void> _saveInbox() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(
+        _userKey(_kInbox), jsonEncode(inbox.value.map((e) => e.toJson()).toList()));
+  }
+
+  /// Los recordatorios programados llegan con la app cerrada, así que no
+  /// podemos "atraparlos". Guardamos cuándo iban a sonar y, al abrir la app,
+  /// los que ya pasaron se pasan a la bandeja.
+  static Future<void> _collectDeliveredReminders() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_userKey(_kScheduled));
+    if (raw == null) return;
+    List<dynamic> pending;
+    try {
+      pending = jsonDecode(raw) as List;
+    } catch (_) {
+      await p.remove(_userKey(_kScheduled));
+      return;
+    }
+    final now = DateTime.now();
+    final remaining = <dynamic>[];
+    for (final e in pending) {
+      final n = AppNotification.fromJson(Map<String, dynamic>.from(e));
+      if (n.date.isAfter(now)) {
+        remaining.add(e);
+      } else {
+        // id único para no chocar con otras notificaciones de la bandeja
+        await _addToInbox(AppNotification(
+            id: n.date.millisecondsSinceEpoch ~/ 1000 + n.id,
+            title: n.title,
+            body: n.body,
+            date: n.date));
+      }
+    }
+    await p.setString(_userKey(_kScheduled), jsonEncode(remaining));
   }
 
   static Future<void> setReminder(bool on) async {
@@ -110,6 +254,10 @@ class NotificationService {
   }
 
   static Future<void> cancelReminders() async {
+    // Antes de borrar lo programado, rescata los que ya sonaron.
+    await _collectDeliveredReminders();
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_userKey(_kScheduled));
     await init();
     await _plugin.cancel(_legacyReminderId);
     for (final id in _reminderIds) {
@@ -129,8 +277,12 @@ class NotificationService {
 
     final msgs = _buildMessages(guias);
     final now = DateTime.now();
+    final scheduled = <Map<String, dynamic>>[];
     for (var i = 0; i < msgs.length && i < _reminderIds.length; i++) {
       final when = DateTime(now.year, now.month, now.day + 1 + i, _reminderHour);
+      scheduled.add(AppNotification(
+              id: _reminderIds[i], title: msgs[i].$1, body: msgs[i].$2, date: when)
+          .toJson());
       await _plugin.zonedSchedule(
         _reminderIds[i],
         msgs[i].$1,
@@ -140,6 +292,7 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
     }
+    await p.setString(_userKey(_kScheduled), jsonEncode(scheduled));
   }
 
   static int _toInt(dynamic v) => int.tryParse(v?.toString() ?? '') ?? 0;

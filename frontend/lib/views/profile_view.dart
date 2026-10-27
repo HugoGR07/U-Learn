@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'login_view.dart';
+import 'home_view.dart';
 import '../services/notification_service.dart';
+import '../widgets/foto_perfil.dart';
+import '../widgets/encabezado_azul.dart';
+import 'terms_view.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
+import '../widgets/ruta_suave.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -15,10 +22,30 @@ class _ProfileViewState extends State<ProfileView> {
   bool _pushNotifications = true;
   bool _reminderNotifications = false;
 
+
+  static const AnimationStyle _animacionHoja = AnimationStyle(
+    duration: Duration(milliseconds: 280),
+    reverseDuration: Duration(milliseconds: 200),
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  bool _fotosPrecargadas = false;
+
   @override
   void initState() {
     super.initState();
     _loadNotificationPrefs();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_fotosPrecargadas) return;
+    _fotosPrecargadas = true;
+    for (int i = 1; i <= FotoPerfil.total; i++) {
+      precacheImage(AssetImage(FotoPerfil.ruta(i)), context);
+    }
   }
 
   Future<void> _loadNotificationPrefs() async {
@@ -32,8 +59,24 @@ class _ProfileViewState extends State<ProfileView> {
     });
   }
 
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(String msg, {String titulo = 'Aviso', TipoAlerta tipo = TipoAlerta.aviso}) {
+    AlertaFlotante.mostrar(context, titulo: titulo, mensaje: msg, tipo: tipo);
+  }
+
+  // VENTANA FLOTANTE (mismo estilo que login, registro y recuperar contraseña)
+  void _showFloatingDialog({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    VoidCallback? onConfirm,
+  }) {
+    AlertaFlotante.mostrar(
+      context,
+      titulo: title,
+      mensaje: message,
+      tipo: isSuccess ? TipoAlerta.exito : TipoAlerta.error,
+      alConfirmar: onConfirm,
+    );
   }
 
   String get _fullName {
@@ -57,21 +100,28 @@ class _ProfileViewState extends State<ProfileView> {
     required String title,
     required IconData icon,
     required List<Widget> children,
+    Color color = const Color(0xFF1D61E7),
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Padding(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: icon,
+          color: color,
+          child: SingleChildScrollView(
           padding: EdgeInsets.only(
             top: 20,
             left: 20,
             right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            bottom: 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -85,10 +135,11 @@ class _ProfileViewState extends State<ProfileView> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFDBEAFE),
+                          color: color.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
                         ),
-                        child: Icon(icon, color: const Color(0xFF1D61E7), size: 20),
+                        child: Icon(icon, color: color, size: 20),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -111,6 +162,8 @@ class _ProfileViewState extends State<ProfileView> {
               ...children,
             ],
           ),
+          ),
+          ),
         );
       },
     );
@@ -127,19 +180,25 @@ class _ProfileViewState extends State<ProfileView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.person_outline_rounded,
+          color: const Color(0xFF1D61E7),
+          child: StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
                 right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -149,10 +208,10 @@ class _ProfileViewState extends State<ProfileView> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.person_outline_rounded, color: Color(0xFF1D61E7)),
-                          SizedBox(width: 8),
-                          Text(
+                        children: [
+                          _iconoHoja(Icons.person_outline_rounded, const Color(0xFF1D61E7)),
+                          const SizedBox(width: 12),
+                          const Text(
                             'Información personal',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
@@ -204,39 +263,54 @@ class _ProfileViewState extends State<ProfileView> {
                         ? null
                         : () async {
                             if (nombreCtrl.text.trim().isEmpty || paternoCtrl.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Nombre y Apellido Paterno son obligatorios')),
+                              _showFloatingDialog(
+                                title: 'Campos incompletos',
+                                message: 'El nombre y el apellido paterno son obligatorios.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             setModalState(() => isSaving = true);
 
+                            final anterior = ApiService.currentUser == null
+                                ? null
+                                : Map<String, dynamic>.from(ApiService.currentUser!);
+                            final nombre = nombreCtrl.text.trim();
+                            final paterno = paternoCtrl.text.trim();
+                            final materno = maternoCtrl.text.trim();
+                            ApiService.currentUser = {
+                              ...?anterior,
+                              'nombre': nombre,
+                              'apellido_paterno': paterno,
+                              'apellido_materno': materno,
+                            };
+                            Navigator.pop(context);
+                            setState(() {});
+
                             final res = await ApiService.updateProfile(
-                              nombre: nombreCtrl.text.trim(),
-                              apellidoPaterno: paternoCtrl.text.trim(),
-                              apellidoMaterno: maternoCtrl.text.trim(),
+                              nombre: nombre,
+                              apellidoPaterno: paterno,
+                              apellidoMaterno: materno,
                             );
 
-                            setModalState(() => isSaving = false);
-
                             if (!mounted) return;
-                            Navigator.pop(context);
 
-                            if (res['success']) {
+                            if (res['success'] == true) {
                               setState(() {}); // Actualiza la pantalla principal con el nuevo nombre
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: const Color(0xFF10B981),
-                                ),
+                              _showFloatingDialog(
+                                title: '¡Datos actualizados! 🎉',
+                                message: 'Tu información personal se guardó correctamente.',
+                                isSuccess: true,
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: Colors.red,
-                                ),
+                              ApiService.currentUser = anterior;
+                              setState(() {});
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudieron actualizar tus datos, inténtalo de nuevo.',
+                                isSuccess: false,
                               );
                             }
                           },
@@ -260,6 +334,165 @@ class _ProfileViewState extends State<ProfileView> {
               ),
             );
           },
+          ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFotoPerfilModal() {
+    int? seleccion = FotoPerfil.desdeUsuario(ApiService.currentUser);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.photo_camera_outlined,
+          color: const Color(0xFFEC4899),
+          child: StatefulBuilder(
+          builder: (context, setModalState) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 20,
+                bottom: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          _iconoHoja(Icons.photo_camera_outlined, const Color(0xFFEC4899)),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Foto de perfil',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  const Text(
+                    'Elige una de las imágenes disponibles:',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 14),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: FotoPerfil.total,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 76,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                    ),
+                    itemBuilder: (context, index) {
+                      final numero = index + 1;
+                      final isSelected = seleccion == numero;
+                      return GestureDetector(
+                        onTap: isSaving ? null : () => setModalState(() => seleccion = numero),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Stack(
+                            children: [
+                              FotoPerfil(numero: numero, size: constraints.maxWidth),
+                              if (isSelected)
+                                const Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: CircleAvatar(
+                                    radius: 11,
+                                    backgroundColor: Colors.white,
+                                    child: CircleAvatar(
+                                      radius: 9,
+                                      backgroundColor: Color(0xFF1D61E7),
+                                      child: Icon(Icons.check, size: 13, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: isSaving || seleccion == null
+                        ? null
+                        : () async {
+                            setModalState(() => isSaving = true);
+                            final foto = seleccion!;
+                            final anterior = ApiService.currentUser == null
+                                ? null
+                                : Map<String, dynamic>.from(ApiService.currentUser!);
+                            ApiService.currentUser = {...?anterior, 'foto_perfil': foto};
+                            Navigator.pop(context);
+                            setState(() {});
+
+                            final res = await ApiService.updateProfilePhoto(foto);
+                            if (!mounted) return;
+
+                            if (res['success'] == true) {
+                              setState(() {});
+                              _showFloatingDialog(
+                                title: '¡Foto actualizada! 🎉',
+                                message: 'Tu nueva foto de perfil se guardó correctamente.',
+                                isSuccess: true,
+                              );
+                            } else {
+                              ApiService.currentUser = anterior;
+                              setState(() {});
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudo guardar tu foto, inténtalo de nuevo.',
+                                isSuccess: false,
+                              );
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      backgroundColor: const Color(0xFF1D61E7),
+                      disabledBackgroundColor: const Color(0xFF93B4F5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Guardar foto',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+          ),
+          ),
         );
       },
     );
@@ -275,19 +508,25 @@ class _ProfileViewState extends State<ProfileView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      sheetAnimationStyle: _animacionHoja,
+      clipBehavior: Clip.antiAlias,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
+        return _AjusteTeclado(
+          child: _FondoHoja(
+          icono: Icons.lock_outline_rounded,
+          color: const Color(0xFF7C3AED),
+          child: StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 20,
                 left: 20,
                 right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -297,10 +536,10 @@ class _ProfileViewState extends State<ProfileView> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
-                          Icon(Icons.lock_outline_rounded, color: Color(0xFF1D61E7)),
-                          SizedBox(width: 8),
-                          Text(
+                        children: [
+                          _iconoHoja(Icons.lock_outline_rounded, const Color(0xFF7C3AED)),
+                          const SizedBox(width: 12),
+                          const Text(
                             'Cambiar contraseña',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
@@ -328,46 +567,55 @@ class _ProfileViewState extends State<ProfileView> {
                             final confirmPass = confirmPassController.text.trim();
 
                             if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Por favor completa todos los campos')),
+                              _showFloatingDialog(
+                                title: 'Campos incompletos',
+                                message: 'Por favor, completa todos los campos para continuar.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             if (newPass != confirmPass) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Las nuevas contraseñas no coinciden')),
+                              _showFloatingDialog(
+                                title: 'Contraseñas incorrectas',
+                                message: 'Las nuevas contraseñas no coinciden, verifícalas.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             if (newPass.length < 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres')),
+                              _showFloatingDialog(
+                                title: 'Contraseña débil',
+                                message: 'La contraseña debe tener al menos 6 caracteres.',
+                                isSuccess: false,
                               );
                               return;
                             }
 
                             setModalState(() => isChanging = true);
+
                             final res = await ApiService.changePassword(
                               currentPassword: currentPass,
                               newPassword: newPass,
                             );
-                            setModalState(() => isChanging = false);
 
                             if (!mounted) return;
-                            Navigator.pop(context);
+                            setModalState(() => isChanging = false);
 
-                            if (res['success']) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: const Color(0xFF10B981),
-                                ),
+                            if (res['success'] == true) {
+                              Navigator.pop(context); // Cierra el formulario solo si se guardó
+                              _showFloatingDialog(
+                                title: '¡Contraseña actualizada! 🎉',
+                                message: 'Tu contraseña se cambió correctamente.',
+                                isSuccess: true,
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res['message']), backgroundColor: Colors.red),
+                              _showFloatingDialog(
+                                title: 'Aviso',
+                                message: res['message']?.toString() ??
+                                    'No se pudo cambiar la contraseña, verifica tu contraseña actual.',
+                                isSuccess: false,
                               );
                             }
                           },
@@ -382,14 +630,28 @@ class _ProfileViewState extends State<ProfileView> {
                             width: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : const Text('Guardar contraseña', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        : const Text('Actualizar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
             );
           },
+          ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _iconoHoja(IconData icono, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: Icon(icono, color: color, size: 20),
     );
   }
 
@@ -410,20 +672,7 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Widget _buildPasswordField(String label, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      obscureText: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-      ),
-    );
+    return _CampoContrasena(label: label, controller: controller);
   }
 
   // 3. Modal: Configuración de Notificaciones
@@ -431,6 +680,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Notificaciones',
       icon: Icons.notifications_none_rounded,
+      color: const Color(0xFFD97706),
       children: [
         StatefulBuilder(
           builder: (context, setModalState) {
@@ -443,7 +693,10 @@ class _ProfileViewState extends State<ProfileView> {
                   value: _pushNotifications,
                   onChanged: (val) async {
                     if (val && !await NotificationService.requestPermission()) {
-                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      _snack(
+                        'Activa los permisos de notificaciones en Ajustes del teléfono.',
+                        titulo: 'Permiso necesario',
+                      );
                       return;
                     }
                     await NotificationService.setPush(val);
@@ -462,13 +715,17 @@ class _ProfileViewState extends State<ProfileView> {
                   subtitle: const Text('Resumen semanal de tu progreso', style: TextStyle(fontSize: 12)),
                   value: _emailNotifications,
                   onChanged: (val) async {
-                    final ok = await ApiService.updateNotificationSettings(emailAlerts: val);
-                    if (!ok) {
-                      _snack('No se pudo guardar la preferencia.');
-                      return;
-                    }
                     setModalState(() => _emailNotifications = val);
                     setState(() => _emailNotifications = val);
+                    final res = await ApiService.updateNotificationSettingsDetallado(emailAlerts: val);
+                    if (res['success'] == true || !mounted) return;
+                    if (context.mounted) setModalState(() => _emailNotifications = !val);
+                    setState(() => _emailNotifications = !val);
+                    _snack(
+                      res['message']?.toString() ?? 'No se pudo guardar tu preferencia. Inténtalo de nuevo.',
+                      titulo: 'No se guardó el cambio',
+                      tipo: TipoAlerta.error,
+                    );
                   },
                 ),
                 const Divider(),
@@ -479,7 +736,10 @@ class _ProfileViewState extends State<ProfileView> {
                   value: _reminderNotifications,
                   onChanged: (val) async {
                     if (val && !await NotificationService.requestPermission()) {
-                      _snack('Activa los permisos de notificaciones en Ajustes del teléfono.');
+                      _snack(
+                        'Activa los permisos de notificaciones en Ajustes del teléfono.',
+                        titulo: 'Permiso necesario',
+                      );
                       return;
                     }
                     await NotificationService.setReminder(val);
@@ -500,6 +760,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Ayuda y soporte',
       icon: Icons.help_outline_rounded,
+      color: const Color(0xFF0891B2),
       children: [
         const Text(
           'Problemas frecuentes y solución de errores:',
@@ -507,12 +768,12 @@ class _ProfileViewState extends State<ProfileView> {
         ),
         const SizedBox(height: 10),
         _buildFaqTile(
-          'Error "No se pudo conectar con el servidor"',
-          'Asegúrate de tener conexión a Internet y que tu backend Node.js esté activo en el mismo puerto.',
+          'Aparece "Sin conexión"',
+          'Revisa que tengas Wi-Fi o datos móviles activos. Si tu conexión está bien, espera unos minutos e inténtalo de nuevo.',
         ),
         _buildFaqTile(
           'Mi guía con IA tarda en generar',
-          'La generación del plan de estudio evalúa múltiples preguntas y lecciones. El proceso suele tomar de 5 a 12 segundos.',
+          'La generación del plan de estudio evalúa múltiples preguntas y lecciones. El tiempo suele incrementar dependiendo del tamaño de la guía.',
         ),
         _buildFaqTile(
           'Error al guardar mis respuestas del examen',
@@ -536,7 +797,7 @@ class _ProfileViewState extends State<ProfileView> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10.0),
-          child: Text(answer, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
+          child: Text(answer, textAlign: TextAlign.justify, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4)),
         ),
       ],
     );
@@ -547,6 +808,7 @@ class _ProfileViewState extends State<ProfileView> {
     _showModal(
       title: 'Acerca de U-Learn',
       icon: Icons.info_outline_rounded,
+      color: const Color(0xFF4F46E5),
       children: [
         const Center(
           child: Column(
@@ -557,8 +819,8 @@ class _ProfileViewState extends State<ProfileView> {
               SizedBox(height: 12),
               Text(
                 'U-Learn es tu tutor personal de educación financiera impulsado por Inteligencia Artificial.\n\n'
-                'Aprende a dominar tus tarjetas de crédito, construir presupuestos reales, crear fondos de ahorro e iniciar tus primeras inversiones sin lenguaje complicado.\n\n'
-                'Nuestra metodología divide temas complejos en guías de estudio interactivas con exámenes de evaluación inmediata para medir tu aprendizaje paso a paso.',
+                'Aprende a dominar tus tarjetas de crédito, construir presupuestos reales y/o crear fondos de ahorro sin la necesidad de entender un lenguaje complicado.\n\n'
+                'Nuestra metodología divide temas complejos en guías de estudio con exámenes de evaluación inmediata para medir tu aprendizaje paso a paso.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.5),
               ),
@@ -571,47 +833,46 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 
-  // 6. Confirmación de Cerrar Sesión
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('¿Cerrar sesión?', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                ApiService.token = null;
-                ApiService.currentUser = null;
+  // Limpia la sesión y deja la pila de navegación como al abrir la app:
+  // HomeView (base) -> LoginView. Así el botón "atrás" del login sigue funcionando.
+  void _cerrarSesion() {
+    ApiService.logout();
 
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginView()),
-                  (route) => false,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Cerrar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+    final navigator = Navigator.of(context);
+    navigator.pushAndRemoveUntil(
+      RutaSuave(page: const HomeView()),
+      (route) => false,
     );
+    navigator.push(
+      RutaSuave(page: const LoginView()),
+    );
+  }
+
+  // 6. Confirmación de Cerrar Sesión
+  bool _cerrandoSesion = false;
+
+  Future<void> _showLogoutDialog() async {
+    final confirmado = await AlertaFlotante.confirmar(
+      context,
+      titulo: '¿Cerrar sesión?',
+      mensaje: 'Tendrás que volver a ingresar tus credenciales para acceder a tus cursos.',
+      tipo: TipoAlerta.error,
+      icono: Icons.logout_rounded,
+      textoConfirmar: 'Cerrar sesión',
+      textoCancelar: 'Cancelar',
+      colorConfirmar: const Color(0xFFEF4444),
+    );
+    // Evita que un doble toque dispare el cierre de sesión dos veces
+    if (!confirmado || _cerrandoSesion || !mounted) return;
+    _cerrandoSesion = true;
+    _cerrarSesion();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      resizeToAvoidBottomInset: false,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -620,78 +881,81 @@ class _ProfileViewState extends State<ProfileView> {
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                Container(
-                  height: 140, // Altura reducida para recortar el espacio superior
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1D61E7),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(24),
-                      bottomRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            onPressed: () => Navigator.maybePop(context),
-                          ),
-                          const Expanded(
-                            child: Text(
-                              'Mi perfil',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 48), // Balance con botón atrás
-                        ],
-                      ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 82),
+                  child: EncabezadoAzul(
+                    title: 'Mi perfil',
+                    grande: true,
+                    leading: EncabezadoAzul.boton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      grande: true,
+                      size: 22,
+                      onTap: () => Navigator.maybePop(context),
                     ),
                   ),
                 ),
 
                 // Avatar Circular sobrepuesto
                 Positioned(
-                  bottom: -45,
-                  child: Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0C097),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                  bottom: 0,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _showFotoPerfilModal,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 110,
+                          height: 110,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDBA74),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1D61E7).withValues(alpha: 0.25),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: FotoPerfil(
+                            numero: FotoPerfil.desdeUsuario(ApiService.currentUser),
+                            size: 103,
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _showFotoPerfilModal,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1D61E7),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.12),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.edit_rounded, size: 18, color: Colors.white),
+                            ),
+                          ),
                         ),
                       ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.face_rounded,
-                        size: 64,
-                        color: Color(0xFF334155),
-                      ),
                     ),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 52),
+            const SizedBox(height: 7),
 
             // 2. Información del Usuario (Dinámica)
             Text(
@@ -716,65 +980,86 @@ class _ProfileViewState extends State<ProfileView> {
             const SizedBox(height: 24),
 
             // 3. Menú de Opciones
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  _buildProfileOption(
-                    icon: Icons.person_outline_rounded,
-                    title: 'Información personal',
-                    onTap: _showPersonalInfoModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.lock_outline_rounded,
-                    title: 'Cambiar contraseña',
-                    onTap: _showChangePasswordModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.notifications_none_rounded,
-                    title: 'Notificaciones',
-                    iconColor: const Color(0xFFD97706),
-                    onTap: _showNotificationsSettingsModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.help_outline_rounded,
-                    title: 'Ayuda y soporte',
-                    onTap: _showHelpSupportModal,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProfileOption(
-                    icon: Icons.info_outline_rounded,
-                    title: 'Acerca de U-Learn',
-                    onTap: _showAboutModal,
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  // 4. Botón Cerrar Sesión
-                  OutlinedButton(
-                    onPressed: _showLogoutDialog,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+            AnchoMaximo(
+              maximo: 620,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  children: [
+                    _buildProfileOption(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Información personal',
+                      iconColor: const Color(0xFF1D61E7),
+                      onTap: _showPersonalInfoModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.photo_camera_outlined,
+                      title: 'Foto de perfil',
+                      iconColor: const Color(0xFFEC4899),
+                      onTap: _showFotoPerfilModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.lock_outline_rounded,
+                      title: 'Cambiar contraseña',
+                      iconColor: const Color(0xFF7C3AED),
+                      onTap: _showChangePasswordModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'Notificaciones',
+                      iconColor: const Color(0xFFD97706),
+                      onTap: _showNotificationsSettingsModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.shield_outlined,
+                      title: 'Términos y privacidad',
+                      iconColor: const Color(0xFF16A34A),
+                      onTap: () => Navigator.push(
+                        context,
+                        RutaSuave(page: const TermsView()),
                       ),
                     ),
-                    child: const Text(
-                      'Cerrar sesión',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFEF4444),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.help_outline_rounded,
+                      title: 'Ayuda y soporte',
+                      iconColor: const Color(0xFF0891B2),
+                      onTap: _showHelpSupportModal,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProfileOption(
+                      icon: Icons.info_outline_rounded,
+                      title: 'Acerca de U-Learn',
+                      iconColor: const Color(0xFF4F46E5),
+                      onTap: _showAboutModal,
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // 4. Botón Cerrar Sesión
+                    ElevatedButton(
+                      onPressed: _showLogoutDialog,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Cerrar sesión',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           ],
@@ -796,7 +1081,7 @@ class _ProfileViewState extends State<ProfileView> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -804,10 +1089,47 @@ class _ProfileViewState extends State<ProfileView> {
               width: 1.2,
             ),
           ),
-          child: Row(
+          child: Stack(
             children: [
-              Icon(icon, color: iconColor, size: 22),
-              const SizedBox(width: 16),
+              Positioned(
+                right: 36,
+                top: -16,
+                child: IgnorePointer(
+                  child: Transform.rotate(
+                    angle: -0.35,
+                    child: Icon(icon, size: 68, color: iconColor.withValues(alpha: 0.08)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: -14,
+                bottom: -18,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: iconColor.withValues(alpha: 0.06),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: iconColor.withValues(alpha: 0.35), width: 1.2),
+                ),
+                child: Icon(icon, color: iconColor, size: 21),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   title,
@@ -824,9 +1146,122 @@ class _ProfileViewState extends State<ProfileView> {
                 size: 20,
               ),
             ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CampoContrasena extends StatefulWidget {
+  final String label;
+  final TextEditingController controller;
+
+  const _CampoContrasena({required this.label, required this.controller});
+
+  @override
+  State<_CampoContrasena> createState() => _CampoContrasenaState();
+}
+
+class _CampoContrasenaState extends State<_CampoContrasena> {
+  bool _oculta = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: _oculta,
+      enableSuggestions: false,
+      autocorrect: false,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        suffixIcon: IconButton(
+          tooltip: _oculta ? 'Mostrar contraseña' : 'Ocultar contraseña',
+          icon: Icon(
+            _oculta ? Icons.remove_red_eye_outlined : Icons.visibility_off_outlined,
+            color: const Color(0xFF94A3B8),
+            size: 20,
+          ),
+          onPressed: () => setState(() => _oculta = !_oculta),
+        ),
+      ),
+    );
+  }
+}
+
+class _AjusteTeclado extends StatelessWidget {
+  final Widget child;
+
+  const _AjusteTeclado({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: RepaintBoundary(child: child),
+    );
+  }
+}
+
+class _FondoHoja extends StatelessWidget {
+  final IconData icono;
+  final Color color;
+  final Widget child;
+
+  const _FondoHoja({required this.icono, required this.color, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: -34,
+          right: -26,
+          child: IgnorePointer(
+            child: Transform.rotate(
+              angle: -0.3,
+              child: Icon(icono, size: 150, color: color.withValues(alpha: 0.07)),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -46,
+          left: -36,
+          child: IgnorePointer(
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.05),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 70,
+          right: -20,
+          child: IgnorePointer(
+            child: Transform.rotate(
+              angle: 0.4,
+              child: Icon(icono, size: 70, color: color.withValues(alpha: 0.05)),
+            ),
+          ),
+        ),
+        child,
+      ],
     );
   }
 }

@@ -25,15 +25,36 @@ async function loadData(idUsuario) {
 
     db.query(`
       SELECT g.id_usuario, g.id_guia, t.nombre_tema,
-             COUNT(s.id_seccion)::int AS total,
-             (COUNT(a.id_seccion) FILTER (WHERE a.completado))::int AS hechas,
-             MAX(a.fecha_fin) FILTER (WHERE a.completado) AS ultima
+             (SELECT COUNT(*) FROM seccion s WHERE s.id_guia = g.id_guia)::int AS total,
+             (SELECT COUNT(*)
+                FROM seccion s
+                JOIN avance_seccion a ON a.id_seccion = s.id_seccion
+                 AND a.id_usuario = g.id_usuario AND a.completado
+               WHERE s.id_guia = g.id_guia)::int AS hechas,
+             (SELECT COUNT(*)
+                FROM seccion s
+                JOIN examen e ON e.id_seccion = s.id_seccion
+               WHERE s.id_guia = g.id_guia)::int AS total_examenes,
+             (SELECT COUNT(DISTINCT e.id_examen)
+                FROM seccion s
+                JOIN examen e ON e.id_seccion = s.id_seccion
+                JOIN intento_examen i ON i.id_examen = e.id_examen AND i.id_usuario = g.id_usuario
+               WHERE s.id_guia = g.id_guia)::int AS examenes_hechos,
+             GREATEST(
+               (SELECT MAX(a.fecha_fin)
+                  FROM seccion s
+                  JOIN avance_seccion a ON a.id_seccion = s.id_seccion
+                   AND a.id_usuario = g.id_usuario AND a.completado
+                 WHERE s.id_guia = g.id_guia),
+               (SELECT MAX(i.fecha_realizacion)
+                  FROM seccion s
+                  JOIN examen e ON e.id_seccion = s.id_seccion
+                  JOIN intento_examen i ON i.id_examen = e.id_examen AND i.id_usuario = g.id_usuario
+                 WHERE s.id_guia = g.id_guia)
+             ) AS ultima
       FROM guia_estudio g
       JOIN usuario u ON u.id_usuario = g.id_usuario AND u.notif_correo = TRUE${f}
       JOIN tema t ON t.id_tema = g.id_tema
-      LEFT JOIN seccion s ON s.id_guia = g.id_guia
-      LEFT JOIN avance_seccion a ON a.id_seccion = s.id_seccion AND a.id_usuario = g.id_usuario
-      GROUP BY g.id_usuario, g.id_guia, t.nombre_tema, g.fecha_creacion
       ORDER BY g.fecha_creacion DESC`, p),
 
     db.query(`
@@ -44,7 +65,11 @@ async function loadData(idUsuario) {
       GROUP BY a.id_usuario`, p),
 
     db.query(`
-      SELECT i.id_usuario, COUNT(*)::int AS intentos
+      SELECT i.id_usuario,
+             COUNT(DISTINCT i.id_examen)::int AS examenes,
+             COUNT(*)::int AS intentos,
+             ROUND(AVG(i.calificacion))::int AS promedio,
+             ROUND(MAX(i.calificacion))::int AS mejor
       FROM intento_examen i
       JOIN usuario u ON u.id_usuario = i.id_usuario AND u.notif_correo = TRUE${f}
       WHERE i.fecha_realizacion >= NOW() - INTERVAL '7 days'
@@ -73,18 +98,30 @@ async function loadData(idUsuario) {
 
 function buildEmail(user, guias, week, exam, pend) {
   const nombre = esc(user.nombre);
-  const lecciones = week?.secciones_semana ?? 0;
-  const examenes = exam?.intentos ?? 0;
+  const secciones = week?.secciones_semana ?? 0;
+  const examenes = exam?.examenes ?? 0;
+  const intentos = exam?.intentos ?? 0;
+  const promedio = exam?.promedio;
+  const mejor = exam?.mejor;
   const exPend = pend?.examenes_pendientes ?? 0;
   const hace7dias = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-  const conPct = guias.map((g) => ({
-    ...g,
-    falta: Math.max(g.total - g.hechas, 0),
-    pct: g.total > 0 ? Math.round((g.hechas / g.total) * 100) : 0,
-  }));
+  const conPct = guias.map((g) => {
+    const totalExamenes = g.total_examenes ?? 0;
+    const examenesHechos = Math.min(g.examenes_hechos ?? 0, totalExamenes);
+    const pasos = g.total + totalExamenes;
+    const hechos = g.hechas + examenesHechos;
+    return {
+      ...g,
+      totalExamenes,
+      examenesHechos,
+      falta: Math.max(g.total - g.hechas, 0),
+      completa: pasos > 0 && hechos >= pasos,
+      pct: pasos > 0 ? Math.min(Math.round((hechos / pasos) * 100), 100) : 0,
+    };
+  });
   const guiasSemana = conPct.filter(
-    (g) => g.total > 0 && g.falta === 0 && g.ultima && new Date(g.ultima).getTime() >= hace7dias
+    (g) => g.completa && g.ultima && new Date(g.ultima).getTime() >= hace7dias
   ).length;
   const secPend = conPct.reduce((n, g) => n + g.falta, 0);
 
@@ -101,17 +138,21 @@ function buildEmail(user, guias, week, exam, pend) {
     <div style="background:#F1F5F9;border-radius:12px;padding:8px 16px">
       <table width="100%" cellpadding="0" cellspacing="0">
         ${fila('Guías', guiasSemana)}
+        ${fila('Secciones', secciones)}
         ${fila('Exámenes', examenes)}
-        ${fila('Lecciones', lecciones)}
+        ${examenes > 0 && promedio != null ? fila('Calificación promedio', `${promedio}%`) : ''}
+        ${examenes > 0 && mejor != null ? fila('Mejor calificación', `${mejor}%`) : ''}
       </table>
+      ${intentos > examenes ? `<div style="font-size:12px;color:#64748B;padding:2px 0 6px">${intentos} intentos en total, contando los exámenes que repetiste.</div>` : ''}
     </div>`;
 
   const barras = conPct.slice(0, 4).map((g) => `
     <tr><td style="padding:8px 0">
       <div style="font-size:14px;color:#1E293B;font-weight:600">${esc(g.nombre_tema)}
-        <span style="float:right;color:#64748B;font-weight:400">${g.hechas}/${g.total} · ${g.pct}%</span></div>
+        <span style="float:right;color:${g.completa ? '#10B981' : '#64748B'};font-weight:700">${g.pct}%</span></div>
       <div style="background:#E2E8F0;border-radius:6px;height:8px;margin-top:6px">
-        <div style="background:#1D61E7;width:${g.pct}%;height:8px;border-radius:6px"></div></div>
+        <div style="background:${g.completa ? '#10B981' : '#1D61E7'};width:${g.pct}%;height:8px;border-radius:6px"></div></div>
+      <div style="font-size:12px;color:#64748B;margin-top:4px">${g.hechas} de ${g.total} secciones · ${g.examenesHechos} de ${g.totalExamenes} exámenes</div>
     </td></tr>`).join('');
 
   const bloquePendientes = (secPend + exPend) > 0 ? `

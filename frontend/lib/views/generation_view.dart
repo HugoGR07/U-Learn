@@ -1,13 +1,21 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
+import '../widgets/alerta_flotante.dart';
+import '../widgets/responsivo.dart';
 
 class GenerationView extends StatefulWidget {
   final String selectedTopic;
+  final String nivel;
+  final int duracionSemanas;
 
   const GenerationView({
     super.key,
     required this.selectedTopic,
+    this.nivel = 'Intermedio',
+    this.duracionSemanas = 4,
   });
 
   @override
@@ -17,6 +25,7 @@ class GenerationView extends StatefulWidget {
 class _GenerationgGuideViewState extends State<GenerationView> {
   double _progress = 0.0;
   Timer? _timer;
+  DateTime _inicio = DateTime.now();
   String _errorMessage = '';
 
   @override
@@ -33,14 +42,14 @@ class _GenerationgGuideViewState extends State<GenerationView> {
 
   /// Inicia el temporizador de progreso visual y dispara la petición al backend en paralelo
   void _startGeneratingCourse() {
+    _inicio = DateTime.now();
+    _timer?.cancel();
     // 1. Simulación progresiva del % para feedback visual del usuario
     _timer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
       if (!mounted) return;
-
+      final segundos = DateTime.now().difference(_inicio).inMilliseconds / 1000;
       setState(() {
-        if (_progress < 0.90) {
-          _progress += 0.03; // Avanza fluidamente hasta el 90%
-        }
+        _progress = math.max(_progress, 0.99 * (1 - math.exp(-segundos / 40)));
       });
     });
 
@@ -49,27 +58,50 @@ class _GenerationgGuideViewState extends State<GenerationView> {
   }
 
   Future<void> _callGenerateApi() async {
-    try {
-      final response = await ApiService.generateCourse(widget.selectedTopic);
+    final response = await ApiService.generateCourse(
+      widget.selectedTopic,
+      nivel: widget.nivel,
+      duracionSemanas: widget.duracionSemanas,
+    );
 
-      if (!mounted) return;
+    if (response['success'] == true) {
+      final int semanasReales = int.tryParse(response['semanas']?.toString() ?? '') ?? widget.duracionSemanas;
+      final semanas = semanasReales == 1 ? '1 semana' : '$semanasReales semanas';
+      NotificationService.showProgress(
+        'Tu guía está lista 🎉',
+        '«${widget.selectedTopic}» ($semanas) ya está en tus cursos.',
+      );
+      NotificationService.refreshReminder();
+    }
 
-      if (response['success'] == true) {
-        // Al completar con éxito, aceleramos la barra al 100%
-        _timer?.cancel();
-        setState(() => _progress = 1.0);
+    if (!mounted) return;
 
-        await Future.delayed(const Duration(milliseconds: 600));
+    if (response['success'] == true) {
+      // Al completar con éxito, aceleramos la barra al 100%
+      _timer?.cancel();
+      setState(() => _progress = 1.0);
 
-        if (mounted) {
-          // Cierra la pantalla de carga y vuelve a Cursos
-          Navigator.pop(context, true);
-        }
+      if (response['incompleta'] == true) {
+        await AlertaFlotante.mostrar(
+          context,
+          titulo: 'Tu guía está lista',
+          mensaje: response['message']?.toString() ?? 'Tu guía se generó con menos semanas de las solicitadas.',
+          tipo: TipoAlerta.info,
+          textoBoton: 'Entendido',
+        );
       } else {
-        _handleError(response['message'] ?? 'No se pudo generar la guía de estudio');
+        await Future.delayed(const Duration(milliseconds: 600));
       }
-    } catch (e) {
-      _handleError('Ocurrió un error inesperado al conectar con el servidor');
+
+      if (mounted) {
+        // Cierra la pantalla de carga y vuelve a Cursos
+        Navigator.pop(context, true);
+      }
+    } else {
+      _handleError(
+        response['message']?.toString() ??
+            'No se pudo generar tu guía en este momento. Inténtalo de nuevo en unos minutos.',
+      );
     }
   }
 
@@ -81,11 +113,12 @@ class _GenerationgGuideViewState extends State<GenerationView> {
       _errorMessage = message;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+    AlertaFlotante.mostrar(
+      context,
+      titulo: 'No se pudo generar tu guía',
+      mensaje: message,
+      tipo: TipoAlerta.error,
+      textoBoton: 'Entendido',
     );
   }
 
@@ -99,192 +132,253 @@ class _GenerationgGuideViewState extends State<GenerationView> {
     final bool step3 = _progress >= 0.75;
     final bool step4 = _progress >= 0.95;
 
+    final horizontal = context.esHorizontal;
+
+    final logo = Container(
+      width: horizontal ? 60 : 76,
+      height: horizontal ? 60 : 76,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          'assets/images/logo.png',
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(
+              Icons.school_rounded,
+              size: 38,
+              color: Color(0xFF1D61E7),
+            );
+          },
+        ),
+      ),
+    );
+
+    final titulos = [
+      // 2. Título Principal
+      Text(
+        'Generando tu guía\npersonalizada',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: horizontal ? 21 : 24,
+          fontWeight: FontWeight.bold,
+          color: const Color(0xFF1E293B),
+          height: 1.25,
+        ),
+      ),
+
+      const SizedBox(height: 12),
+
+      // Subtítulo
+      Text(
+        _errorMessage.isEmpty && DateTime.now().difference(_inicio).inSeconds >= 75
+            ? 'Estamos afinando los últimos detalles para que los temas y los exámenes queden coherentes. Ya casi termina.'
+            : 'La IA está generando un plan de estudio sobre "${widget.selectedTopic}".',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFF64748B),
+          height: 1.4,
+        ),
+      ),
+    ];
+
+    final double tamCirculo = horizontal ? 120 : 150;
+
+    // 3. Indicador Porcentaje Circular Animado
+    final circulo = SizedBox(
+      width: tamCirculo,
+      height: tamCirculo,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: tamCirculo,
+            height: tamCirculo,
+            child: CircularProgressIndicator(
+              value: _progress,
+              strokeWidth: horizontal ? 12 : 14,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF1D61E7),
+              ),
+            ),
+          ),
+          Text(
+            '$percentage%',
+            style: TextStyle(
+              fontSize: horizontal ? 28 : 32,
+              fontWeight: FontWeight.w900,
+              color: const Color(0xFF1D61E7),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 4. Lista Dinámica de Pasos
+    final pasos = Column(
+      children: [
+        _buildStepItem(
+          title: 'Analizando el curso seleccionado',
+          isCompleted: step1,
+          isDotted: !step1 && _progress < 0.25,
+        ),
+        const SizedBox(height: 16),
+        _buildStepItem(
+          title: 'Organizando el contenido',
+          isCompleted: step2,
+          isDotted: !step2 && step1,
+        ),
+        const SizedBox(height: 16),
+        _buildStepItem(
+          title: 'Generando lecciones con IA',
+          isCompleted: step3,
+          isDotted: !step3 && step2,
+        ),
+        const SizedBox(height: 16),
+        _buildStepItem(
+          title: 'Preparando exámenes',
+          isCompleted: step4,
+          isDotted: !step4 && step3,
+        ),
+      ],
+    );
+
+    // 5. Porcentaje y Barra de Progreso Inferior
+    final barra = [
+      Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          '$percentage%',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1D61E7),
+          ),
+        ),
+      ),
+
+      const SizedBox(height: 6),
+
+      ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: LinearProgressIndicator(
+          value: _progress,
+          minHeight: 8,
+          backgroundColor: const Color(0xFFE2E8F0),
+          valueColor: const AlwaysStoppedAnimation<Color>(
+            Color(0xFF1D61E7),
+          ),
+        ),
+      ),
+
+      if (_errorMessage.isNotEmpty) ...[
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              _errorMessage = '';
+              _progress = 0.0;
+            });
+            _startGeneratingCourse();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1D61E7),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Reintentar', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
-
-                // 1. Logo U-Learn
-                Container(
-                  width: 76,
-                  height: 76,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+        child: horizontal
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CentradoDesplazable(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            logo,
+                            const SizedBox(height: 14),
+                            ...titulos,
+                            const SizedBox(height: 18),
+                            circulo,
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(
-                          Icons.school_rounded,
-                          size: 38,
-                          color: Color(0xFF1D61E7),
-                        );
-                      },
                     ),
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                // 2. Título Principal
-                const Text(
-                  'Generando tu guía\npersonalizada',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                    height: 1.25,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Subtítulo
-                Text(
-                  'Nuestra IA está creando un plan de estudio\nespecial sobre "${widget.selectedTopic}".',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                    height: 1.4,
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-
-                // 3. Indicador Porcentaje Circular Animado
-                SizedBox(
-                  width: 150,
-                  height: 150,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 150,
-                        height: 150,
-                        child: CircularProgressIndicator(
-                          value: _progress,
-                          strokeWidth: 14,
-                          backgroundColor: const Color(0xFFE2E8F0),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF1D61E7),
+                    const SizedBox(width: 40),
+                    Expanded(
+                      child: CentradoDesplazable(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              pasos,
+                              const SizedBox(height: 28),
+                              ...barra,
+                            ],
                           ),
                         ),
                       ),
-                      Text(
-                        '$percentage%',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1D61E7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 48),
-
-                // 4. Lista Dinámica de Pasos
-                Column(
-                  children: [
-                    _buildStepItem(
-                      title: 'Analizando el curso seleccionado',
-                      isCompleted: step1,
-                      isDotted: !step1 && _progress < 0.25,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildStepItem(
-                      title: 'Organizando el contenido',
-                      isCompleted: step2,
-                      isDotted: !step2 && step1,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildStepItem(
-                      title: 'Generando lecciones con IA',
-                      isCompleted: step3,
-                      isDotted: !step3 && step2,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildStepItem(
-                      title: 'Preparando ejercicios y examen',
-                      isCompleted: step4,
-                      isDotted: !step4 && step3,
                     ),
                   ],
                 ),
+              )
+            : Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: AnchoMaximo(
+                    maximo: 480,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
 
-                const SizedBox(height: 40),
+                        // 1. Logo U-Learn
+                        logo,
 
-                // 5. Porcentaje y Barra de Progreso Inferior
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '$percentage%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1D61E7),
+                        const SizedBox(height: 28),
+
+                        ...titulos,
+
+                        const SizedBox(height: 40),
+
+                        circulo,
+
+                        const SizedBox(height: 48),
+
+                        pasos,
+
+                        const SizedBox(height: 40),
+
+                        ...barra,
+
+                        const SizedBox(height: 20),
+                      ],
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 6),
-
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: _progress,
-                    minHeight: 8,
-                    backgroundColor: const Color(0xFFE2E8F0),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF1D61E7),
-                    ),
-                  ),
-                ),
-
-                if (_errorMessage.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _errorMessage = '';
-                        _progress = 0.0;
-                      });
-                      _startGeneratingCourse();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D61E7),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Reintentar', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
