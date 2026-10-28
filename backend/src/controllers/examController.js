@@ -6,6 +6,7 @@ const MAX_ERRORES_TUTOR = 15;
 const MAX_TEORIA_POR_SECCION = 7000;
 const INCISOS = ['A', 'B', 'C', 'D'];
 
+
 const tutorSchema = {
   type: Type.OBJECT,
   properties: {
