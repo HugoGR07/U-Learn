@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:frontend/services/api_service.dart';
 import 'login_view.dart';
 import 'terms_view.dart';
@@ -6,6 +7,7 @@ import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/ruta_suave.dart';
 import '../widgets/u_fondo.dart';
+import '../widgets/validaciones.dart';
 
 class RegisterView extends StatefulWidget {
   const RegisterView({super.key});
@@ -22,8 +24,12 @@ class _RegisterViewState extends State<RegisterView> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
+  final _formKey = GlobalKey<FormState>();
+  final _confirmKey = GlobalKey<FormFieldState<String>>();
+
   bool _isLoading = false;
   bool _aceptaTerminos = false;
+  bool _ocultarPass = true;
 
   @override
   void dispose() {
@@ -44,33 +50,20 @@ class _RegisterViewState extends State<RegisterView> {
     final contrasena = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
+    FocusScope.of(context).unfocus();
+
     // Validaciones
-    if (nombre.isEmpty ||
-        apellidoPaterno.isEmpty ||
-        correo.isEmpty ||
-        contrasena.isEmpty ||
-        confirmPassword.isEmpty) {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      final faltan = nombre.isEmpty ||
+          apellidoPaterno.isEmpty ||
+          correo.isEmpty ||
+          contrasena.isEmpty ||
+          confirmPassword.isEmpty;
       _showFloatingDialog(
-        title: 'Campos incompletos',
-        message: 'Por favor, completa los campos obligatorios para continuar.',
-        isSuccess: false,
-      );
-      return;
-    }
-
-    if (contrasena != confirmPassword) {
-      _showFloatingDialog(
-        title: 'Contraseñas incorrectas',
-        message: 'Las contraseñas no coinciden, verifícalas.',
-        isSuccess: false,
-      );
-      return;
-    }
-
-    if (contrasena.length < 6) {
-      _showFloatingDialog(
-        title: 'Contraseña débil',
-        message: 'La contraseña debe tener al menos 6 caracteres.',
+        title: faltan ? 'Campos incompletos' : 'Revisa tus datos',
+        message: faltan
+            ? 'Por favor, completa los campos obligatorios para continuar.'
+            : 'Corrige los campos marcados en rojo para continuar.',
         isSuccess: false,
       );
       return;
@@ -220,6 +213,10 @@ class _RegisterViewState extends State<RegisterView> {
         controller: _nameController,
         hintText: 'Nombre(s)',
         icon: Icons.person_outline_rounded,
+        keyboardType: TextInputType.name,
+        capitalization: TextCapitalization.words,
+        formatters: Validar.formatoNombre,
+        validator: (v) => Validar.nombre(v, campo: 'tu nombre'),
       ),
 
       // Campo Apellido Paterno
@@ -227,6 +224,10 @@ class _RegisterViewState extends State<RegisterView> {
         controller: _paternoController,
         hintText: 'Apellido paterno',
         icon: Icons.badge_outlined,
+        keyboardType: TextInputType.name,
+        capitalization: TextCapitalization.words,
+        formatters: Validar.formatoNombre,
+        validator: (v) => Validar.nombre(v, campo: 'tu apellido paterno'),
       ),
 
       // Campo Apellido Materno
@@ -234,6 +235,10 @@ class _RegisterViewState extends State<RegisterView> {
         controller: _maternoController,
         hintText: 'Apellido materno (opcional)',
         icon: Icons.badge_outlined,
+        keyboardType: TextInputType.name,
+        capitalization: TextCapitalization.words,
+        formatters: Validar.formatoNombre,
+        validator: (v) => Validar.nombre(v, obligatorio: false),
       ),
 
       // Campo Correo
@@ -242,6 +247,8 @@ class _RegisterViewState extends State<RegisterView> {
         hintText: 'Correo electrónico',
         icon: Icons.email_outlined,
         keyboardType: TextInputType.emailAddress,
+        formatters: Validar.formatoCorreo,
+        validator: Validar.correo,
       ),
 
       // Campo Contraseña
@@ -250,14 +257,23 @@ class _RegisterViewState extends State<RegisterView> {
         hintText: 'Contraseña',
         icon: Icons.lock_outline_rounded,
         isPassword: true,
+        formatters: Validar.formatoContrasena,
+        validator: Validar.contrasenaNueva,
+        onChanged: (_) {
+          if (_confirmPasswordController.text.isNotEmpty) _confirmKey.currentState?.validate();
+        },
       ),
 
       // Campo Confirmar Contraseña
       _buildInputField(
         controller: _confirmPasswordController,
+        fieldKey: _confirmKey,
         hintText: 'Confirmar contraseña',
         icon: Icons.lock_outline_rounded,
         isPassword: true,
+        formatters: Validar.formatoContrasena,
+        validator: (v) => Validar.confirmar(v, _passwordController.text),
+        textInputAction: TextInputAction.done,
       ),
     ];
 
@@ -268,6 +284,7 @@ class _RegisterViewState extends State<RegisterView> {
             return Wrap(
               spacing: 14,
               runSpacing: 14,
+              crossAxisAlignment: WrapCrossAlignment.start,
               children: [for (final campo in campos) SizedBox(width: ancho, child: campo)],
             );
           },
@@ -286,7 +303,8 @@ class _RegisterViewState extends State<RegisterView> {
           onPressed: _isLoading ? null : _handleRegister,
           style: ElevatedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
-            backgroundColor: const Color.fromARGB(255, 11, 13, 15),
+            backgroundColor: const Color(0xFF1D61E7),
+            disabledBackgroundColor: const Color(0xFF1D61E7).withOpacity(0.6),
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -353,13 +371,14 @@ class _RegisterViewState extends State<RegisterView> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Positioned(
-            left: 0,
-            bottom: -tamanoU * 0.12,
-            child: RepaintBoundary(child: UFondo(tamano: tamanoU)),
+          Positioned.fill(
+            child: UFondo(tamano: tamanoU),
           ),
           SafeArea(
-            child: horizontal
+            child: Form(
+              key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: horizontal
                 ? Row(
                     children: [
                       Expanded(
@@ -421,6 +440,7 @@ class _RegisterViewState extends State<RegisterView> {
                       ),
                     ),
                   ),
+            ),
           ),
         ],
       ),
@@ -500,16 +520,31 @@ class _RegisterViewState extends State<RegisterView> {
   }
 
   Widget _buildInputField({
+    Key? fieldKey,
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
+    TextCapitalization capitalization = TextCapitalization.none,
+    List<TextInputFormatter>? formatters,
+    FormFieldValidator<String>? validator,
+    ValueChanged<String>? onChanged,
+    TextInputAction textInputAction = TextInputAction.next,
   }) {
-    return TextField(
+    return TextFormField(
+      key: fieldKey,
       controller: controller,
-      obscureText: isPassword,
+      obscureText: isPassword && _ocultarPass,
       keyboardType: keyboardType,
+      textCapitalization: capitalization,
+      textInputAction: textInputAction,
+      inputFormatters: formatters,
+      validator: validator,
+      onChanged: onChanged,
+      enableSuggestions: !isPassword,
+      autocorrect: false,
+      onFieldSubmitted: textInputAction == TextInputAction.done ? (_) => _handleRegister() : null,
       style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
         hintText: hintText,
@@ -519,9 +554,21 @@ class _RegisterViewState extends State<RegisterView> {
           color: const Color(0xFF94A3B8),
           size: 20,
         ),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  _ocultarPass ? Icons.remove_red_eye_outlined : Icons.visibility_off_outlined,
+                  color: const Color(0xFF94A3B8),
+                  size: 20,
+                ),
+                onPressed: () => setState(() => _ocultarPass = !_ocultarPass),
+              )
+            : null,
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(vertical: 18),
+        errorStyle: Validar.estiloError,
+        errorMaxLines: 2,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
@@ -530,6 +577,8 @@ class _RegisterViewState extends State<RegisterView> {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFF1D61E7), width: 1.5),
         ),
+        errorBorder: Validar.bordeError(16),
+        focusedErrorBorder: Validar.bordeErrorFoco(16),
       ),
     );
   }

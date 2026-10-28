@@ -39,6 +39,7 @@ dependencies:
   flutter_local_notifications: 19.3.0
   shared_preferences: ^2.5.6
   timezone: ^0.10.1
+  sensors_plus: ^7.0.0
 
 dev_dependencies:
   flutter_test:

@@ -161,9 +161,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         },
         child: Stack(
           children: [
-            Positioned(
-              left: 0,
-              bottom: -(MediaQuery.sizeOf(context).shortestSide * 0.95).clamp(260.0, 500.0) * 0.12,
+            Positioned.fill(
               child: FadeTransition(
                 opacity: _interval(0.0, 0.6),
                 child: UFondo(

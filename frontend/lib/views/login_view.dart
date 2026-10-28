@@ -7,6 +7,7 @@ import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/ruta_suave.dart';
 import '../widgets/u_fondo.dart';
+import '../widgets/validaciones.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -18,7 +19,8 @@ class LoginView extends StatefulWidget {
 class _LoginViewState extends State<LoginView> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
+  final _formKey = GlobalKey<FormState>();
+
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -33,10 +35,15 @@ class _LoginViewState extends State<LoginView> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
+    FocusScope.of(context).unfocus();
+
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      final faltan = email.isEmpty || password.isEmpty;
       _showFloatingDialog(
-        title: 'Campos incompletos',
-        message: 'Por favor, ingresa tu correo y contraseña para continuar.',
+        title: faltan ? 'Campos incompletos' : 'Correo inválido',
+        message: faltan
+            ? 'Por favor, ingresa tu correo y contraseña para continuar.'
+            : 'Ingresa un correo electrónico válido para continuar.',
         isSuccess: false,
       );
       return;
@@ -177,13 +184,20 @@ class _LoginViewState extends State<LoginView> {
       ),
     ];
 
-    final formulario = Column(
+    final formulario = Form(
+      key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Campo Email
-        TextField(
+        TextFormField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+          inputFormatters: Validar.formatoCorreo,
+          validator: Validar.correo,
           style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             hintText: 'Correo electrónico',
@@ -204,15 +218,26 @@ class _LoginViewState extends State<LoginView> {
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: Color(0xFF1D61E7), width: 1.5),
             ),
+            errorBorder: Validar.bordeError(16),
+            focusedErrorBorder: Validar.bordeErrorFoco(16),
+            errorStyle: Validar.estiloError,
+            errorMaxLines: 2,
           ),
         ),
 
         const SizedBox(height: 16),
 
         // Campo Password
-        TextField(
+        TextFormField(
           controller: _passwordController,
           obscureText: _obscurePassword,
+          textInputAction: TextInputAction.done,
+          enableSuggestions: false,
+          autocorrect: false,
+          validator: Validar.contrasenaLogin,
+          onFieldSubmitted: (_) {
+            if (!_isLoading) _handleLogin();
+          },
           style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             hintText: 'Contraseña',
@@ -245,6 +270,10 @@ class _LoginViewState extends State<LoginView> {
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: Color(0xFF1D61E7), width: 1.5),
             ),
+            errorBorder: Validar.bordeError(16),
+            focusedErrorBorder: Validar.bordeErrorFoco(16),
+            errorStyle: Validar.estiloError,
+            errorMaxLines: 2,
           ),
         ),
 
@@ -284,6 +313,7 @@ class _LoginViewState extends State<LoginView> {
           style: ElevatedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
             backgroundColor: const Color(0xFF1D61E7),
+            disabledBackgroundColor: const Color(0xFF1D61E7).withOpacity(0.6),
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -341,6 +371,7 @@ class _LoginViewState extends State<LoginView> {
           ],
         ),
       ],
+    ),
     );
 
     return Scaffold(
@@ -349,10 +380,8 @@ class _LoginViewState extends State<LoginView> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Positioned(
-            left: 0,
-            bottom: -tamanoU * 0.12,
-            child: RepaintBoundary(child: UFondo(tamano: tamanoU)),
+          Positioned.fill(
+            child: UFondo(tamano: tamanoU),
           ),
           SafeArea(
             child: LayoutBuilder(

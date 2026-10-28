@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
+import '../widgets/validaciones.dart';
 
 class ForgotpssView extends StatefulWidget {
   const ForgotpssView({super.key});
@@ -20,6 +21,11 @@ class _ForgotpssViewState extends State<ForgotpssView> {
   final _codigoController = TextEditingController();
   final _passController = TextEditingController();
   final _pass2Controller = TextEditingController();
+
+  final _correoKey = GlobalKey<FormFieldState<String>>();
+  final _codigoKey = GlobalKey<FormFieldState<String>>();
+  final _passKey = GlobalKey<FormFieldState<String>>();
+  final _pass2Key = GlobalKey<FormFieldState<String>>();
 
   int _paso = 0;
   bool _cargando = false;
@@ -52,7 +58,9 @@ class _ForgotpssViewState extends State<ForgotpssView> {
 
   Future<void> _enviarCodigo() async {
     final correo = _emailController.text.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(correo)) {
+    FocusScope.of(context).unfocus();
+    if (_paso == 0) _correoKey.currentState?.validate();
+    if (Validar.correo(correo) != null) {
       _showFloatingDialog(
         title: 'Correo inválido',
         message: 'Ingresa un correo electrónico válido para continuar.',
@@ -85,7 +93,9 @@ class _ForgotpssViewState extends State<ForgotpssView> {
 
   Future<void> _verificarCodigo() async {
     final codigo = _codigoController.text.trim();
-    if (codigo.length != 6) {
+    FocusScope.of(context).unfocus();
+    _codigoKey.currentState?.validate();
+    if (Validar.codigo(codigo) != null) {
       _showFloatingDialog(
         title: 'Código incompleto',
         message: 'Ingresa el código de 6 dígitos que te enviamos.',
@@ -111,6 +121,9 @@ class _ForgotpssViewState extends State<ForgotpssView> {
 
   Future<void> _cambiarContrasena() async {
     final pass = _passController.text;
+    FocusScope.of(context).unfocus();
+    _passKey.currentState?.validate();
+    _pass2Key.currentState?.validate();
     if (pass.isEmpty || _pass2Controller.text.isEmpty) {
       _showFloatingDialog(
         title: 'Campos incompletos',
@@ -119,10 +132,11 @@ class _ForgotpssViewState extends State<ForgotpssView> {
       );
       return;
     }
-    if (pass.length < 6) {
+    final errorPass = Validar.contrasenaNueva(pass);
+    if (errorPass != null) {
       _showFloatingDialog(
         title: 'Contraseña débil',
-        message: 'La contraseña debe tener al menos 6 caracteres.',
+        message: 'La contraseña debe tener al menos ${Validar.minContrasena} caracteres e incluir letras y números, sin espacios.',
         isSuccess: false,
       );
       return;
@@ -188,6 +202,10 @@ class _ForgotpssViewState extends State<ForgotpssView> {
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: _azul, width: 1.5),
       ),
+      errorBorder: Validar.bordeError(16),
+      focusedErrorBorder: Validar.bordeErrorFoco(16),
+      errorStyle: Validar.estiloError,
+      errorMaxLines: 2,
     );
   }
 
@@ -248,12 +266,17 @@ class _ForgotpssViewState extends State<ForgotpssView> {
           '¿Olvidaste tu contraseña?',
           'Ingresa tu correo electrónico y te enviaremos un código para restablecerla.',
         ),
-        TextField(
+        TextFormField(
+          key: _correoKey,
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          inputFormatters: Validar.formatoCorreo,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: Validar.correo,
           style: const TextStyle(fontSize: 14, color: _oscuro),
           decoration: _decoracion('Correo electrónico', Icons.email_outlined),
-          onSubmitted: (_) => _enviarCodigo(),
+          onFieldSubmitted: (_) => _enviarCodigo(),
         ),
         const SizedBox(height: 24),
         _boton('Enviar código', _enviarCodigo),
@@ -269,15 +292,18 @@ class _ForgotpssViewState extends State<ForgotpssView> {
           'Revisa tu correo',
           'Enviamos un código de 6 dígitos a\n${_emailController.text.trim()}\nEl código vence en 15 minutos.',
         ),
-        TextField(
+        TextFormField(
+          key: _codigoKey,
           controller: _codigoController,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: Validar.codigo,
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
           maxLength: 6,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           style: const TextStyle(fontSize: 24, letterSpacing: 10, fontWeight: FontWeight.bold, color: _oscuro),
           decoration: _decoracion('000000', Icons.pin_outlined),
-          onSubmitted: (_) => _verificarCodigo(),
+          onFieldSubmitted: (_) => _verificarCodigo(),
         ),
         const SizedBox(height: 24),
         _boton('Verificar código', _verificarCodigo),
@@ -311,21 +337,37 @@ class _ForgotpssViewState extends State<ForgotpssView> {
         _encabezado(
           Icons.password_rounded,
           'Nueva contraseña',
-          'Crea una contraseña nueva de al menos 6 caracteres.',
+          'Crea una contraseña nueva de al menos ${Validar.minContrasena} caracteres, con letras y números.',
         ),
-        TextField(
+        TextFormField(
+          key: _passKey,
           controller: _passController,
           obscureText: _ocultarPass,
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
+          inputFormatters: Validar.formatoContrasena,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: Validar.contrasenaNueva,
+          onChanged: (_) {
+            if (_pass2Controller.text.isNotEmpty) _pass2Key.currentState?.validate();
+          },
           style: const TextStyle(fontSize: 14, color: _oscuro),
           decoration: _decoracion('Nueva contraseña', Icons.lock_outline_rounded, sufijo: ojo),
         ),
         const SizedBox(height: 16),
-        TextField(
+        TextFormField(
+          key: _pass2Key,
           controller: _pass2Controller,
           obscureText: _ocultarPass,
+          enableSuggestions: false,
+          autocorrect: false,
+          inputFormatters: Validar.formatoContrasena,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (v) => Validar.confirmar(v, _passController.text),
           style: const TextStyle(fontSize: 14, color: _oscuro),
           decoration: _decoracion('Confirmar contraseña', Icons.lock_outline_rounded),
-          onSubmitted: (_) => _cambiarContrasena(),
+          onFieldSubmitted: (_) => _cambiarContrasena(),
         ),
         const SizedBox(height: 24),
         _boton('Cambiar', _cambiarContrasena),

@@ -9,6 +9,7 @@ import 'terms_view.dart';
 import '../widgets/alerta_flotante.dart';
 import '../widgets/responsivo.dart';
 import '../widgets/ruta_suave.dart';
+import '../widgets/validaciones.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -266,6 +267,18 @@ class _ProfileViewState extends State<ProfileView> {
                               _showFloatingDialog(
                                 title: 'Campos incompletos',
                                 message: 'El nombre y el apellido paterno son obligatorios.',
+                                isSuccess: false,
+                              );
+                              return;
+                            }
+
+                            final errorNombre = Validar.nombre(nombreCtrl.text, campo: 'tu nombre') ??
+                                Validar.nombre(paternoCtrl.text, campo: 'tu apellido paterno') ??
+                                Validar.nombre(maternoCtrl.text, obligatorio: false);
+                            if (errorNombre != null) {
+                              _showFloatingDialog(
+                                title: 'Revisa tus datos',
+                                message: 'Nombre y apellidos: solo letras, de 2 a ${Validar.maxNombre} caracteres.',
                                 isSuccess: false,
                               );
                               return;
@@ -584,10 +597,19 @@ class _ProfileViewState extends State<ProfileView> {
                               return;
                             }
 
-                            if (newPass.length < 6) {
+                            if (Validar.contrasenaNueva(newPass) != null) {
                               _showFloatingDialog(
                                 title: 'Contraseña débil',
-                                message: 'La contraseña debe tener al menos 6 caracteres.',
+                                message: 'La contraseña debe tener al menos ${Validar.minContrasena} caracteres e incluir letras y números, sin espacios.',
+                                isSuccess: false,
+                              );
+                              return;
+                            }
+
+                            if (newPass == currentPass) {
+                              _showFloatingDialog(
+                                title: 'Misma contraseña',
+                                message: 'La nueva contraseña debe ser diferente a la actual.',
                                 isSuccess: false,
                               );
                               return;
@@ -658,6 +680,9 @@ class _ProfileViewState extends State<ProfileView> {
   Widget _buildInputField(String label, TextEditingController controller) {
     return TextField(
       controller: controller,
+      keyboardType: TextInputType.name,
+      textCapitalization: TextCapitalization.words,
+      inputFormatters: Validar.formatoNombre,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),

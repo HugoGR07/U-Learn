@@ -3,7 +3,7 @@ const db = require('../config/db');
 
 const GUIAS_POR_DIA = parseInt(process.env.GUIAS_POR_DIA || '5', 10);
 const TUTOR_POR_HORA = parseInt(process.env.TUTOR_POR_HORA || '20', 10);
-
+ 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
