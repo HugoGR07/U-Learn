@@ -32,7 +32,7 @@ exports.getDashboard = async (req, res) => {
   const idUsuario = req.user.id_usuario;
 
   try {
-    const [cursosQ, intentosQ, respuestasQ, temasQ, recientesQ, actividadQ, diasQ, seccionesQ] =
+    const [cursosQ, intentosQ, respuestasQ, temasQ, recientesQ, actividadQ, diasQ, seccionesQ, evolucionQ] =
       await Promise.all([
         // Una fila por curso (guía) con su avance y el promedio de sus mejores notas
         db.query(
@@ -133,6 +133,15 @@ exports.getDashboard = async (req, res) => {
              FROM avance_seccion WHERE id_usuario = $1 AND completado = TRUE`,
           [idUsuario]
         ),
+        // Evolución de calificaciones (últimos 10 intentos, de más viejo a más nuevo)
+        db.query(
+          `SELECT calificacion, fecha_realizacion FROM (
+             SELECT calificacion, fecha_realizacion
+               FROM intento_examen WHERE id_usuario = $1
+              ORDER BY fecha_realizacion DESC LIMIT 10) x
+            ORDER BY fecha_realizacion ASC`,
+          [idUsuario]
+        ),
       ]);
 
     // Clasificación de cursos:
@@ -221,6 +230,10 @@ exports.getDashboard = async (req, res) => {
         examenes: r.examenes,
       })),
       actividad_semanal: actividadSemanal,
+      evolucion_notas: evolucionQ.rows.map((r) => ({
+        calificacion: redondear(r.calificacion),
+        fecha: r.fecha_realizacion,
+      })),
       ultimos_examenes: recientesQ.rows.map((r) => ({
         nombre_tema: r.nombre_tema,
         seccion: r.seccion,
