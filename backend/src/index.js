@@ -7,6 +7,7 @@ const { runWeeklySummary } = require('./jobs/weeklySummary');
 const authRoutes = require('./routes/authRoutes');
 const examRoutes = require('./routes/examRoutes');
 const guideRoutes = require('./routes/guideRoutes');
+const statsRoutes = require('./routes/statsRoutes');
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/guides', guideRoutes);
+app.use('/api/stats', statsRoutes);
 
 app.get('/api/cron/weekly', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {

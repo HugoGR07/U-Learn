@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'topics_view.dart';
 import 'profile_view.dart';
+import 'dashboard_view.dart';
 import 'study_view.dart';
 import '../widgets/foto_perfil.dart';
 import '../widgets/encabezado_azul.dart';
@@ -937,6 +938,20 @@ class _CoursesViewState extends State<CoursesView> {
               ],
             ),
           ),
+          // Botón de Progreso -> Abre el dashboard con las estadísticas del usuario
+          GestureDetector(
+            onTap: () {
+              _quitarBanner();
+              Navigator.push(context, RutaSuave(page: const DashboardView()));
+            },
+            child: Container(
+              width: EncabezadoAzul.tamBotonGrande,
+              height: EncabezadoAzul.tamBotonGrande,
+              decoration: EncabezadoAzul.decoracionVidrio,
+              child: const Icon(Icons.insights_rounded, color: Colors.white, size: 25),
+            ),
+          ),
+          const SizedBox(width: 12),
           // Botón de Campana -> Despliega la ventana modal de notificaciones
           ValueListenableBuilder<List<AppNotification>>(
             valueListenable: NotificationService.inbox,

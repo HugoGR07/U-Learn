@@ -238,6 +238,24 @@ class ApiService {
     );
   }
 
+  // ESTADÍSTICAS GENERALES DEL USUARIO (dashboard)
+  static Future<Map<String, dynamic>> getDashboardStats() async {
+    final response = await _enviar(() => http.get(
+          Uri.parse('$baseUrl/stats/dashboard'),
+          headers: _headers(),
+        ));
+
+    final data = _json(response);
+    if (response.statusCode == 200) return data;
+    if (await _sesionInvalida(response)) {
+      throw ApiException(mensajeSesionExpirada, statusCode: response.statusCode);
+    }
+    throw ApiException(
+      _mensaje(response, data, 'No pudimos cargar tus estadísticas. Inténtalo de nuevo.'),
+      statusCode: response.statusCode,
+    );
+  }
+
   // Actualizar información personal
   static Future<Map<String, dynamic>> updateProfile({
     required String nombre,
