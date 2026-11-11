@@ -241,7 +241,7 @@ class ApiService {
   // ESTADÍSTICAS GENERALES DEL USUARIO (dashboard)
   static Future<Map<String, dynamic>> getDashboardStats() async {
     final response = await _enviar(() => http.get(
-          Uri.parse('$baseUrl/stats/dashboard'),
+          Uri.parse('$baseUrl/stats/dashboard?tz_offset=${DateTime.now().timeZoneOffset.inMinutes}'),
           headers: _headers(),
         ));
 

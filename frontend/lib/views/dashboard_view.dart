@@ -5,7 +5,7 @@ import '../services/api_service.dart';
 import '../widgets/encabezado_azul.dart';
 import '../widgets/responsivo.dart';
 
-/// Dashboard con los datos generales de actividad del usuario.
+/// Dashboard con los datos más relevantes de la actividad del usuario.
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
 
@@ -15,18 +15,16 @@ class DashboardView extends StatefulWidget {
 
 class _DashboardViewState extends State<DashboardView> with SingleTickerProviderStateMixin {
   static const Color _azul = Color(0xFF1D61E7);
-  static const Color _azulClaro = Color(0xFF60A5FA);
   static const Color _verde = Color(0xFF10B981);
   static const Color _rojo = Color(0xFFEF4444);
   static const Color _ambar = Color(0xFFF59E0B);
-  static const Color _naranja = Color(0xFFF97316);
   static const Color _texto = Color(0xFF0F172A);
   static const Color _suave = Color(0xFF64748B);
   static const Color _gris = Color(0xFFE2E8F0);
 
   late final AnimationController _anim = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1500),
+    duration: const Duration(milliseconds: 1200),
   );
 
   Map<String, dynamic>? _datos;
@@ -78,15 +76,10 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     return v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
   }
 
-  List<Map<String, dynamic>> _lista(String clave, [Map<String, dynamic>? base]) {
-    final v = (base ?? _datos)?[clave];
-    if (v is! List) return [];
-    return v.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-  }
-
   int _int(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
   double? _dbl(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v');
   double get _umbral => _dbl(_datos?['umbral_aprobatorio']) ?? 60;
+  double get _t => Curves.easeOutCubic.transform(_anim.value);
 
   String _nota(double? v) {
     if (v == null) return '—';
@@ -172,10 +165,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
                       style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     SizedBox(height: 2),
-                    Text(
-                      'Tu actividad en U-Learn',
-                      style: TextStyle(fontSize: 13, color: Colors.white70),
-                    ),
+                    Text('Tu actividad en U-Learn', style: TextStyle(fontSize: 13, color: Colors.white70)),
                   ],
                 ),
               ),
@@ -198,10 +188,9 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   }
 
   Widget _resumenEncabezado() {
-    final ex = _mapa('examenes');
-    final promedio = _dbl(ex['promedio']);
+    final promedio = _dbl(_mapa('examenes')['promedio']);
     final racha = _int(_datos?['racha_dias']);
-    final precision = _dbl(_mapa('preguntas')['precision']);
+    final precision = _dbl(_datos?['precision']);
 
     final String nivel;
     final IconData iconoNivel;
@@ -226,39 +215,36 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       children: [
         AnimatedBuilder(
           animation: _anim,
-          builder: (context, _) {
-            final t = Curves.easeOutCubic.transform(_anim.value);
-            return SizedBox(
-              width: 112,
-              height: 112,
-              child: CustomPaint(
-                painter: _AnilloPainter(
-                  progreso: ((promedio ?? 0) / 100) * t,
-                  color: Colors.white,
-                  fondo: Colors.white.withValues(alpha: 0.22),
-                  grosor: 10,
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        promedio == null ? '—' : _nota(promedio * t),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1,
-                        ),
+          builder: (context, _) => SizedBox(
+            width: 108,
+            height: 108,
+            child: CustomPaint(
+              painter: _AnilloPainter(
+                progreso: ((promedio ?? 0) / 100) * _t,
+                color: Colors.white,
+                fondo: Colors.white.withValues(alpha: 0.22),
+                grosor: 10,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      promedio == null ? '—' : _nota(promedio * _t),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1,
                       ),
-                      const SizedBox(height: 3),
-                      const Text('promedio', style: TextStyle(fontSize: 11, color: Colors.white70)),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text('promedio', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
         const SizedBox(width: 18),
         Expanded(
@@ -272,11 +258,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
                   Expanded(
                     child: Text(
                       nivel,
-                      style: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),
                 ],
@@ -286,8 +268,16 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chipHeader(Icons.local_fire_department_rounded, '$racha ${racha == 1 ? 'día' : 'días'}', Colors.orangeAccent),
-                  _chipHeader(Icons.gps_fixed_rounded, precision == null ? '—' : '${_nota(precision)}% aciertos', Colors.lightGreenAccent),
+                  _chipHeader(
+                    Icons.local_fire_department_rounded,
+                    '$racha ${racha == 1 ? 'día' : 'días'}',
+                    Colors.orangeAccent,
+                  ),
+                  _chipHeader(
+                    Icons.gps_fixed_rounded,
+                    precision == null ? 'Sin aciertos aún' : '${_nota(precision)}% aciertos',
+                    Colors.lightGreenAccent,
+                  ),
                 ],
               ),
             ],
@@ -328,22 +318,17 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     final cursos = _mapa('cursos');
     if (_int(cursos['tomados']) == 0) return _estadoVacio();
 
-    final secciones = <Widget>[
+    final bloques = <Widget>[
       _kpis(cursos),
-      _tarjetaCursos(cursos),
       _tarjetaEvolucion(),
-      _tarjetaActividad(),
-      _tarjetaPrecision(),
-      if (_lista('detalle', cursos).isNotEmpty) _tarjetaProgresoCursos(cursos),
-      if (_lista('por_tema').isNotEmpty) _tarjetaTemas(),
-      if (_lista('ultimos_examenes').isNotEmpty) _tarjetaUltimos(),
+      _tarjetaProgresoCursos(cursos),
     ];
 
     return Column(
       children: [
-        for (int i = 0; i < secciones.length; i++) ...[
+        for (int i = 0; i < bloques.length; i++) ...[
           if (i > 0) const SizedBox(height: 16),
-          _aparecer(i, secciones[i]),
+          _aparecer(i, bloques[i]),
         ],
       ],
     );
@@ -351,7 +336,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
 
   // Entrada escalonada de cada bloque
   Widget _aparecer(int indice, Widget hijo) {
-    final inicio = (indice * 0.07).clamp(0.0, 0.6);
+    final inicio = (indice * 0.12).clamp(0.0, 0.6);
     final animacion = CurvedAnimation(
       parent: _anim,
       curve: Interval(inicio, (inicio + 0.4).clamp(0.0, 1.0), curve: Curves.easeOutCubic),
@@ -365,9 +350,6 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       child: hijo,
     );
   }
-
-  // Progreso 0–1 compartido por las gráficas
-  double get _t => Curves.easeOutCubic.transform(_anim.value);
 
   // ---------- Estados ----------
   Widget _estadoError() {
@@ -424,22 +406,19 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     );
   }
 
-  // ---------- KPIs ----------
+  // ---------- Cursos: 4 números clave ----------
   Widget _kpis(Map<String, dynamic> c) {
-    final ex = _mapa('examenes');
     final datos = [
       _Kpi(Icons.menu_book_rounded, 'Cursos tomados', _int(c['tomados']), _azul, destacado: true),
       _Kpi(Icons.timelapse_rounded, 'En curso', _int(c['en_curso']), _ambar),
       _Kpi(Icons.verified_rounded, 'Aprobados', _int(c['aprobados']), _verde),
       _Kpi(Icons.cancel_rounded, 'Reprobados', _int(c['reprobados']), _rojo),
-      _Kpi(Icons.assignment_turned_in_rounded, 'Exámenes', _int(ex['presentados']), _azulClaro),
-      _Kpi(Icons.task_alt_rounded, 'Secciones listas', _int(_datos?['secciones_completadas']), const Color(0xFF8B5CF6)),
     ];
 
     return LayoutBuilder(
-      builder: (context, c) {
+      builder: (context, caja) {
         const espacio = 12.0;
-        final ancho = (c.maxWidth - espacio * 2) / 3;
+        final ancho = (caja.maxWidth - espacio) / 2;
         return Wrap(
           spacing: espacio,
           runSpacing: espacio,
@@ -454,7 +433,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   Widget _tarjetaKpi(_Kpi d) {
     final fg = d.destacado ? Colors.white : _texto;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: d.destacado
             ? const LinearGradient(
@@ -474,122 +453,36 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: (d.destacado ? Colors.white : d.color).withValues(alpha: d.destacado ? 0.2 : 0.12),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(d.icono, size: 20, color: d.destacado ? Colors.white : d.color),
-          ),
-          const SizedBox(height: 12),
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (context, _) => Text(
-              '${(d.valor * _t).round()}',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: fg, height: 1),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            d.etiqueta,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11.5,
-              color: d.destacado ? Colors.white70 : _suave,
-              height: 1.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------- Dona de estado de cursos ----------
-  Widget _tarjetaCursos(Map<String, dynamic> c) {
-    final aprobados = _int(c['aprobados']);
-    final reprobados = _int(c['reprobados']);
-    final sinIniciar = _int(c['sin_iniciar']);
-    final enCurso = (_int(c['en_curso']) - sinIniciar).clamp(0, 1 << 30);
-    final total = _int(c['tomados']);
-
-    final segmentos = [
-      _Segmento('Aprobados', aprobados.toDouble(), _verde),
-      _Segmento('En curso', enCurso.toDouble(), _ambar),
-      _Segmento('Reprobados', reprobados.toDouble(), _rojo),
-      _Segmento('Sin iniciar', sinIniciar.toDouble(), const Color(0xFFCBD5E1)),
-    ];
-
-    return _tarjeta(
-      titulo: 'Estado de mis cursos',
-      icono: Icons.donut_large_rounded,
       child: Row(
         children: [
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (context, _) => SizedBox(
-              width: 128,
-              height: 128,
-              child: CustomPaint(
-                painter: _DonaPainter(segmentos: segmentos, progreso: _t, grosor: 20),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$total',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: _texto,
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        total == 1 ? 'curso' : 'cursos',
-                        style: const TextStyle(fontSize: 11.5, color: _suave),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: (d.destacado ? Colors.white : d.color).withValues(alpha: d.destacado ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(13),
             ),
+            child: Icon(d.icono, size: 23, color: d.destacado ? Colors.white : d.color),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final s in segmentos)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 11,
-                          height: 11,
-                          decoration: BoxDecoration(color: s.color, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(s.nombre, style: const TextStyle(fontSize: 13, color: _suave)),
-                        ),
-                        Text(
-                          '${s.valor.toInt()}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: _texto,
-                          ),
-                        ),
-                      ],
-                    ),
+                AnimatedBuilder(
+                  animation: _anim,
+                  builder: (context, _) => Text(
+                    '${(d.valor * _t).round()}',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: fg, height: 1),
                   ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  d.etiqueta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: d.destacado ? Colors.white70 : _suave),
+                ),
               ],
             ),
           ),
@@ -600,277 +493,54 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
 
   // ---------- Evolución de calificaciones ----------
   Widget _tarjetaEvolucion() {
-    final notas = _lista('evolucion_notas').map((e) => _dbl(e['calificacion']) ?? 0).toList();
-    final ex = _mapa('examenes');
+    final notas = (_datos?['evolucion_notas'] is List)
+        ? (_datos!['evolucion_notas'] as List).map((e) => _dbl(e) ?? 0).toList()
+        : <double>[];
+    final mejor = _dbl(_mapa('examenes')['mejor']);
 
     return _tarjeta(
       titulo: 'Evolución de calificaciones',
       icono: Icons.show_chart_rounded,
-      subtitulo: notas.isEmpty ? null : 'Tus últimos ${notas.length} exámenes',
-      child: notas.isEmpty
-          ? const _Vacio('Presenta exámenes para ver cómo evolucionas.')
-          : Column(
-              children: [
-                AnimatedBuilder(
-                  animation: _anim,
-                  builder: (context, _) => SizedBox(
-                    height: 170,
-                    width: double.infinity,
-                    child: CustomPaint(
-                      painter: _LineaPainter(
-                        valores: notas,
-                        umbral: _umbral,
-                        progreso: _t,
-                        color: _azul,
-                        colorUmbral: _verde,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _miniDato('Mejor', _nota(_dbl(ex['mejor'])), _colorNota(_dbl(ex['mejor']))),
-                    _miniDato('Promedio', _nota(_dbl(ex['promedio'])), _colorNota(_dbl(ex['promedio']))),
-                    _miniDato('Aprobados', '${_int(ex['aprobados'])}', _verde),
-                    _miniDato('Reprobados', '${_int(ex['reprobados'])}', _rojo),
-                  ],
-                ),
-              ],
-            ),
-    );
-  }
-
-  Widget _miniDato(String etiqueta, String valor, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(valor, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: color)),
-          const SizedBox(height: 2),
-          Text(etiqueta, style: const TextStyle(fontSize: 11, color: _suave)),
-        ],
-      ),
-    );
-  }
-
-  // ---------- Actividad semanal ----------
-  Widget _tarjetaActividad() {
-    final dias = _lista('actividad_semanal');
-    final maximo = dias.fold<int>(1, (m, d) => _int(d['examenes']) > m ? _int(d['examenes']) : m);
-    const nombres = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-    final racha = _int(_datos?['racha_dias']);
-    final hoy = DateTime.now();
-
-    return _tarjeta(
-      titulo: 'Actividad de la semana',
-      icono: Icons.bar_chart_rounded,
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: _naranja.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.local_fire_department_rounded, size: 16, color: _naranja),
-            const SizedBox(width: 3),
-            Text(
-              '$racha ${racha == 1 ? 'día' : 'días'}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _naranja),
-            ),
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (context, _) => SizedBox(
-              height: 128,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final d in dias)
-                    Expanded(
-                      child: _barraDia(
-                        cantidad: _int(d['examenes']),
-                        maximo: maximo,
-                        letra: nombres[(DateTime.tryParse('${d['dia']}')?.weekday ?? 1) - 1],
-                        esHoy: DateTime.tryParse('${d['dia']}')?.day == hoy.day,
-                      ),
-                    ),
-                ],
+      trailing: mejor == null
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: _colorNota(mejor).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Mejor: ${_nota(mejor)}',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _colorNota(mejor)),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _dato(Icons.event_available_rounded, '${_int(_datos?['dias_activos'])}', 'días activos', _azul),
-              _dato(Icons.assignment_turned_in_rounded, '${dias.fold<int>(0, (s, d) => s + _int(d['examenes']))}',
-                  'exámenes en 7 días', _verde),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _barraDia({required int cantidad, required int maximo, required String letra, required bool esHoy}) {
-    final alto = 8 + 72 * (cantidad / maximo) * _t;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        SizedBox(
-          height: 16,
-          child: cantidad > 0
-              ? Text('$cantidad', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _azul))
-              : null,
-        ),
-        const SizedBox(height: 3),
-        Container(
-          width: 24,
-          height: alto,
-          decoration: BoxDecoration(
-            gradient: cantidad > 0
-                ? const LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [_azul, _azulClaro],
-                  )
-                : null,
-            color: cantidad > 0 ? null : _gris,
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        const SizedBox(height: 7),
-        Container(
-          width: 22,
-          height: 22,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: esHoy ? _azul : Colors.transparent,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            letra,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: esHoy ? FontWeight.bold : FontWeight.normal,
-              color: esHoy ? Colors.white : _suave,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _dato(IconData icono, String valor, String etiqueta, Color color) {
-    return Expanded(
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icono, size: 18, color: color),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(valor, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _texto, height: 1.1)),
-                Text(etiqueta, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: _suave)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------- Precisión (aciertos vs errores) ----------
-  Widget _tarjetaPrecision() {
-    final pr = _mapa('preguntas');
-    final total = _int(pr['respondidas']);
-    final correctas = _int(pr['correctas']);
-    final incorrectas = total - correctas;
-    final precision = _dbl(pr['precision']);
-
-    return _tarjeta(
-      titulo: 'Precisión en preguntas',
-      icono: Icons.gps_fixed_rounded,
-      child: total == 0
-          ? const _Vacio('Aún no has respondido preguntas.')
-          : Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${_nota(precision == null ? null : precision * _t)}%',
-                      style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: _colorNota(precision), height: 1),
-                    ),
-                    const SizedBox(width: 8),
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 4),
-                      child: Text('de aciertos', style: TextStyle(fontSize: 13, color: _suave)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                AnimatedBuilder(
-                  animation: _anim,
-                  builder: (context, _) => ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      height: 14,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: math.max(1, (correctas * _t * 1000).round()),
-                            child: Container(color: _verde),
-                          ),
-                          Expanded(
-                            flex: math.max(1, (incorrectas * 1000).round()),
-                            child: Container(color: _rojo.withValues(alpha: 0.85)),
-                          ),
-                        ],
-                      ),
-                    ),
+      child: notas.isEmpty
+          ? const _Vacio('Presenta un examen para ver cómo evolucionas.')
+          : AnimatedBuilder(
+              animation: _anim,
+              builder: (context, _) => SizedBox(
+                height: 170,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _LineaPainter(
+                    valores: notas,
+                    umbral: _umbral,
+                    progreso: _t,
+                    color: _azul,
+                    colorUmbral: _verde,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _leyenda(_verde, '$correctas correctas'),
-                    const Spacer(),
-                    _leyenda(_rojo, '$incorrectas incorrectas'),
-                  ],
-                ),
-              ],
+              ),
             ),
-    );
-  }
-
-  Widget _leyenda(Color color, String texto) {
-    return Row(
-      children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text(texto, style: const TextStyle(fontSize: 12.5, color: _suave)),
-      ],
     );
   }
 
   // ---------- Avance por curso ----------
   Widget _tarjetaProgresoCursos(Map<String, dynamic> cursos) {
-    final lista = _lista('detalle', cursos);
+    final lista = (cursos['detalle'] is List)
+        ? (cursos['detalle'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+
     return _tarjeta(
       titulo: 'Avance por curso',
       icono: Icons.auto_stories_rounded,
@@ -888,10 +558,9 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   Widget _filaCurso(Map<String, dynamic> c) {
     final estilo = _estiloTema('${c['nombre_tema']}');
     final progreso = (_dbl(c['progreso']) ?? 0).clamp(0.0, 1.0);
-    final estado = '${c['estado']}';
-    final (etiqueta, colorEstado) = switch (estado) {
+    final (etiqueta, colorEstado) = switch ('${c['estado']}') {
       'aprobado' => ('Aprobado', _verde),
-      'reprobado' => ('Reprobado', _rojo),
+      'reprobado' => ('Reprobado · promedio ${_nota(_dbl(c['promedio']))}', _rojo),
       _ => progreso == 0 ? ('Sin iniciar', _suave) : ('En curso', _ambar),
     };
 
@@ -922,16 +591,27 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${(progreso * _t * 100).round()}%',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: estilo.color),
+                  AnimatedBuilder(
+                    animation: _anim,
+                    builder: (context, _) => Text(
+                      '${(progreso * _t * 100).round()}%',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: estilo.color),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               AnimatedBuilder(
                 animation: _anim,
-                builder: (context, _) => _barra(progreso * _t, estilo.color),
+                builder: (context, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: (progreso * _t).clamp(0.0, 1.0),
+                    minHeight: 8,
+                    backgroundColor: _gris,
+                    valueColor: AlwaysStoppedAnimation(estilo.color),
+                  ),
+                ),
               ),
               const SizedBox(height: 5),
               Text(
@@ -945,167 +625,16 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     );
   }
 
-  // ---------- Rendimiento por tema ----------
-  Widget _tarjetaTemas() {
-    final temas = _lista('por_tema');
-    return _tarjeta(
-      titulo: 'Rendimiento por tema',
-      icono: Icons.pie_chart_rounded,
-      subtitulo: 'La marca indica la nota aprobatoria (${_nota(_umbral)})',
-      child: Column(
-        children: [
-          for (int i = 0; i < temas.length; i++) ...[
-            if (i > 0) const SizedBox(height: 14),
-            _filaTema(temas[i]),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _filaTema(Map<String, dynamic> t) {
-    final promedio = _dbl(t['promedio']);
-    final color = _colorNota(promedio);
-    final estilo = _estiloTema('${t['nombre_tema']}');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(estilo.icono, size: 17, color: estilo.color),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Text(
-                '${t['nombre_tema']}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _texto),
-              ),
-            ),
-            Text(
-              _nota(promedio),
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
-            ),
-          ],
-        ),
-        const SizedBox(height: 7),
-        AnimatedBuilder(
-          animation: _anim,
-          builder: (context, _) => LayoutBuilder(
-            builder: (context, c) => Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _barra(((promedio ?? 0) / 100) * _t, color, alto: 10),
-                Positioned(
-                  left: c.maxWidth * (_umbral / 100) - 1,
-                  top: -3,
-                  child: Container(width: 2, height: 16, color: _texto.withValues(alpha: 0.55)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ---------- Últimos exámenes ----------
-  Widget _tarjetaUltimos() {
-    final lista = _lista('ultimos_examenes');
-    return _tarjeta(
-      titulo: 'Últimos exámenes',
-      icono: Icons.history_rounded,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Column(
-        children: [
-          for (int i = 0; i < lista.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            _filaExamen(lista[i]),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _filaExamen(Map<String, dynamic> e) {
-    final nota = _dbl(e['calificacion']);
-    final color = _colorNota(nota);
-    final fecha = DateTime.tryParse('${e['fecha']}')?.toLocal();
-    final aprobado = (nota ?? 0) >= _umbral;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 46,
-            height: 46,
-            child: CustomPaint(
-              painter: _AnilloPainter(
-                progreso: ((nota ?? 0) / 100) * _t,
-                color: color,
-                fondo: color.withValues(alpha: 0.15),
-                grosor: 5,
-              ),
-              child: Center(
-                child: Icon(
-                  aprobado ? Icons.check_rounded : Icons.close_rounded,
-                  size: 20,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${e['seccion']}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _texto),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${e['nombre_tema']} · intento ${_int(e['numero_intento'])}'
-                  '${fecha == null ? '' : ' · ${_fecha(fecha)}'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: _suave),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(_nota(nota), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-        ],
-      ),
-    );
-  }
-
-  String _fecha(DateTime f) {
-    final ahora = DateTime.now();
-    final dias = DateTime(ahora.year, ahora.month, ahora.day).difference(DateTime(f.year, f.month, f.day)).inDays;
-    if (dias == 0) return 'hoy';
-    if (dias == 1) return 'ayer';
-    return '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}';
-  }
-
-  // ---------- Componentes comunes ----------
+  // ---------- Contenedor de tarjeta ----------
   Widget _tarjeta({
     required String titulo,
     required IconData icono,
     required Widget child,
-    String? subtitulo,
     Widget? trailing,
-    EdgeInsetsGeometry? padding,
   }) {
     return Container(
       width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -1142,25 +671,9 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               ?trailing,
             ],
           ),
-          if (subtitulo != null) ...[
-            const SizedBox(height: 6),
-            Text(subtitulo, style: const TextStyle(fontSize: 12, color: _suave)),
-          ],
           const SizedBox(height: 16),
           child,
         ],
-      ),
-    );
-  }
-
-  Widget _barra(double valor, Color color, {double alto = 8}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: LinearProgressIndicator(
-        value: valor.clamp(0.0, 1.0),
-        minHeight: alto,
-        backgroundColor: _gris,
-        valueColor: AlwaysStoppedAnimation(color),
       ),
     );
   }
@@ -1177,13 +690,6 @@ class _Kpi {
   final Color color;
   final bool destacado;
   const _Kpi(this.icono, this.etiqueta, this.valor, this.color, {this.destacado = false});
-}
-
-class _Segmento {
-  final String nombre;
-  final double valor;
-  final Color color;
-  const _Segmento(this.nombre, this.valor, this.color);
 }
 
 class _Vacio extends StatelessWidget {
@@ -1224,79 +730,33 @@ class _AnilloPainter extends CustomPainter {
     final radio = (math.min(size.width, size.height) - grosor) / 2;
     final rect = Rect.fromCircle(center: centro, radius: radio);
 
-    final pincelFondo = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = grosor
-      ..color = fondo;
-    canvas.drawCircle(centro, radio, pincelFondo);
-
-    final p = progreso.clamp(0.0, 1.0);
-    if (p <= 0) return;
-    final pincel = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = grosor
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * p, false, pincel);
-  }
-
-  @override
-  bool shouldRepaint(_AnilloPainter old) =>
-      old.progreso != progreso || old.color != color || old.fondo != fondo || old.grosor != grosor;
-}
-
-/// Gráfica de dona con segmentos de colores.
-class _DonaPainter extends CustomPainter {
-  final List<_Segmento> segmentos;
-  final double progreso; // 0–1 (animación)
-  final double grosor;
-
-  _DonaPainter({required this.segmentos, required this.progreso, required this.grosor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centro = size.center(Offset.zero);
-    final radio = (math.min(size.width, size.height) - grosor) / 2;
-    final rect = Rect.fromCircle(center: centro, radius: radio);
-
     canvas.drawCircle(
       centro,
       radio,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = grosor
-        ..color = const Color(0xFFE2E8F0),
+        ..color = fondo,
     );
 
-    final total = segmentos.fold<double>(0, (s, e) => s + e.valor);
-    if (total <= 0) return;
-
-    final activos = segmentos.where((s) => s.valor > 0).length;
-    final hueco = activos > 1 ? 0.05 : 0.0; // separación entre segmentos
-    final barrido = 2 * math.pi * progreso;
-    double inicio = -math.pi / 2;
-    double acumulado = 0;
-
-    for (final s in segmentos) {
-      if (s.valor <= 0) continue;
-      final angulo = (s.valor / total) * 2 * math.pi;
-      final visible = math.max(0.0, math.min(angulo, barrido - acumulado));
-      acumulado += angulo;
-      if (visible <= 0) continue;
-
-      final pincel = Paint()
+    final p = progreso.clamp(0.0, 1.0);
+    if (p <= 0) return;
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * p,
+      false,
+      Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = grosor
-        ..strokeCap = StrokeCap.butt
-        ..color = s.color;
-      final largo = math.max(0.0, visible - hueco);
-      canvas.drawArc(rect, inicio + hueco / 2, largo, false, pincel);
-      inicio += angulo;
-    }
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
   }
 
   @override
-  bool shouldRepaint(_DonaPainter old) => old.progreso != progreso || old.segmentos != segmentos;
+  bool shouldRepaint(_AnilloPainter old) =>
+      old.progreso != progreso || old.color != color || old.fondo != fondo || old.grosor != grosor;
 }
 
 /// Gráfica de línea con área degradada y línea de nota aprobatoria.
@@ -1319,9 +779,9 @@ class _LineaPainter extends CustomPainter {
   static const double _abajo = 4;
   static const double _arriba = 8;
 
-  void _texto(Canvas canvas, String t, Offset pos, {Color c = const Color(0xFF94A3B8)}) {
+  void _texto(Canvas canvas, String t, Offset pos) {
     final tp = TextPainter(
-      text: TextSpan(text: t, style: TextStyle(fontSize: 10.5, color: c)),
+      text: TextSpan(text: t, style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8))),
       textDirection: TextDirection.ltr,
     )..layout();
     tp.paint(canvas, Offset(pos.dx - tp.width, pos.dy - tp.height / 2));
@@ -1352,12 +812,10 @@ class _LineaPainter extends CustomPainter {
 
     if (valores.isEmpty) return;
 
-    // Puntos
     final n = valores.length;
     final pasos = n > 1 ? n - 1 : 1;
     final puntos = <Offset>[
-      for (int i = 0; i < n; i++)
-        Offset(n > 1 ? _izq + ancho * (i / pasos) : _izq + ancho / 2, y(valores[i])),
+      for (int i = 0; i < n; i++) Offset(n > 1 ? _izq + ancho * (i / pasos) : _izq + ancho / 2, y(valores[i])),
     ];
 
     // Recorte horizontal para animar el trazo de izquierda a derecha
@@ -1371,19 +829,16 @@ class _LineaPainter extends CustomPainter {
       final p1 = puntos[i];
       final p2 = puntos[i + 1];
       final p3 = i + 2 < puntos.length ? puntos[i + 2] : p2;
-      final c1 = Offset(p1.dx + (p2.dx - p0.dx) / 6, p1.dy + (p2.dy - p0.dy) / 6);
-      final c2 = Offset(p2.dx - (p3.dx - p1.dx) / 6, p2.dy - (p3.dy - p1.dy) / 6);
       linea.cubicTo(
-        c1.dx,
-        c1.dy,
-        c2.dx,
-        c2.dy,
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
         p2.dx,
         p2.dy,
       );
     }
 
-    // Área bajo la curva
     if (puntos.length > 1) {
       final area = Path.from(linea)
         ..lineTo(puntos.last.dx, y(0))
@@ -1409,11 +864,10 @@ class _LineaPainter extends CustomPainter {
       );
     }
 
-    // Marcadores
+    // Marcadores (verde si aprobó)
     for (int i = 0; i < puntos.length; i++) {
-      final aprobado = valores[i] >= umbral;
       canvas.drawCircle(puntos[i], 6, Paint()..color = Colors.white);
-      canvas.drawCircle(puntos[i], 4.2, Paint()..color = aprobado ? colorUmbral : color);
+      canvas.drawCircle(puntos[i], 4.2, Paint()..color = valores[i] >= umbral ? colorUmbral : color);
     }
     canvas.restore();
   }
