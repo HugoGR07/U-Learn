@@ -30,6 +30,7 @@ class _ForgotpssViewState extends State<ForgotpssView> {
   int _paso = 0;
   bool _cargando = false;
   bool _ocultarPass = true;
+  bool _ocultarPass2 = true;
 
   @override
   void dispose() {
@@ -332,6 +333,14 @@ class _ForgotpssViewState extends State<ForgotpssView> {
       ),
       onPressed: () => setState(() => _ocultarPass = !_ocultarPass),
     );
+    final ojo2 = IconButton(
+      icon: Icon(
+        _ocultarPass2 ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+        color: const Color(0xFF94A3B8),
+        size: 20,
+      ),
+      onPressed: () => setState(() => _ocultarPass2 = !_ocultarPass2),
+    );
     return Column(
       children: [
         _encabezado(
@@ -359,14 +368,14 @@ class _ForgotpssViewState extends State<ForgotpssView> {
         TextFormField(
           key: _pass2Key,
           controller: _pass2Controller,
-          obscureText: _ocultarPass,
+          obscureText: _ocultarPass2,
           enableSuggestions: false,
           autocorrect: false,
           inputFormatters: Validar.formatoContrasena,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           validator: (v) => Validar.confirmar(v, _passController.text),
           style: const TextStyle(fontSize: 14, color: _oscuro),
-          decoration: _decoracion('Confirmar contraseña', Icons.lock_outline_rounded),
+          decoration: _decoracion('Confirmar contraseña', Icons.lock_outline_rounded, sufijo: ojo2),
           onFieldSubmitted: (_) => _cambiarContrasena(),
         ),
         const SizedBox(height: 24),

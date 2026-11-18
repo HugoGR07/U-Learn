@@ -142,8 +142,8 @@ class _UFondoState extends State<UFondo> with TickerProviderStateMixin, WidgetsB
 
     _posicion.value = siguiente;
     _giro.value = Offset(
-      (velocidad.dx * 0.18).clamp(-0.35, 0.35),
-      (velocidad.dy * 0.18).clamp(-0.35, 0.35),
+      (velocidad.dx * 0.08).clamp(-0.12, 0.12),
+      (velocidad.dy * 0.08).clamp(-0.12, 0.12),
     );
 
     if ((_objetivo - siguiente).distanceSquared < 0.000004) {
@@ -293,7 +293,7 @@ class _UFondoState extends State<UFondo> with TickerProviderStateMixin, WidgetsB
           }
 
           final minX = -t * 0.06;
-          final maxX = math.max(minX, limites.maxWidth - t * 0.66);
+          final rango = t * 0.06;
           final minY = -t * 0.08;
           final maxY = math.max(minY, limites.maxHeight - t * 0.88);
 
@@ -309,8 +309,8 @@ class _UFondoState extends State<UFondo> with TickerProviderStateMixin, WidgetsB
                     final v = _curva.value;
                     final p = _posicion.value;
                     final g = _giro.value;
-                    final x = minX + (p.dx + 1) / 2 * (maxX - minX);
-                    final y = minY + (p.dy + 1) / 2 * (maxY - minY);
+                    final x = minX + (p.dx + 1) / 2 * rango;
+                    final y = maxY + (p.dy - 1) / 2 * rango;
                     final s = 1 + 0.03 * v;
                     final giro = Matrix4.identity()
                       ..setEntry(3, 2, 0.0012)
